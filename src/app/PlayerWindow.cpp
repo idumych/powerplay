@@ -9,6 +9,7 @@
 #include <Application.h>
 #include <Box.h>
 #include <Deskbar.h>
+#include <GroupView.h>
 #include <LayoutBuilder.h>
 #include <MenuBar.h>
 #include <MenuItem.h>
@@ -123,9 +124,11 @@ PlayerWindow::PlayerWindow(BRect frame)
 	fBox->SetLabel("PowerPlay");
 
 	float unit = ControlUnit();
-	float gap = roundf(unit / 7);
+	// Spacing measured from the original: 2 px between buttons, the
+	// controls just under the box's title.
+	float gap = roundf(unit / 11);
 	BLayoutBuilder::Group<>(fBox, B_HORIZONTAL, roundf(unit / 3))
-		.SetInsets(roundf(unit / 3), roundf(unit * 0.9f), roundf(unit / 3),
+		.SetInsets(roundf(unit / 3), roundf(unit * 0.75f), roundf(unit / 3),
 			roundf(unit / 3))
 		.AddGroup(B_HORIZONTAL, gap)
 			.Add(fPreviousButton)
@@ -145,19 +148,23 @@ PlayerWindow::PlayerWindow(BRect frame)
 		.End()
 		.Add(eject);
 
+	// The optional meter has a row of its own, hidden as a whole so it
+	// leaves no gap.
 	fMeter = new VUView("meter", 2);
+	fMeterRow = new BGroupView("meter row", B_HORIZONTAL, 0);
+	BLayoutBuilder::Group<>((BGroupView*)fMeterRow)
+		.SetInsets(0, 0, 0, roundf(unit / 3))
+		.AddGlue()
+		.Add(fMeter)
+		.AddGlue();
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(menuBar)
-		.AddGroup(B_VERTICAL, roundf(unit / 3))
+		.AddGroup(B_VERTICAL, 0)
 			.SetInsets(roundf(unit / 3))
 			.Add(fBox)
-			.AddGroup(B_HORIZONTAL, 0)
-				.AddGlue()
-				.Add(fMeter)
-				.AddGlue()
-			.End()
-		.End();
+		.End()
+		.Add(fMeterRow);
 
 	SetState(false, 1.0, false);
 	SetPosition(0, 0);
@@ -363,7 +370,7 @@ PlayerWindow::SetRepeat(bool repeat)
 void
 PlayerWindow::SetLevels(float left, float right)
 {
-	if (!fMeter->IsHidden(fMeter))
+	if (!fMeterRow->IsHidden(fMeterRow))
 		fMeter->SetLevels(left, right);
 }
 
@@ -371,15 +378,17 @@ PlayerWindow::SetLevels(float left, float right)
 void
 PlayerWindow::SetWindowMeter(bool show)
 {
-	if (show && fMeter->IsHidden(fMeter))
-		fMeter->Show();
-	else if (!show && !fMeter->IsHidden(fMeter))
-		fMeter->Hide();
+	if (show && fMeterRow->IsHidden(fMeterRow))
+		fMeterRow->Show();
+	else if (!show && !fMeterRow->IsHidden(fMeterRow))
+		fMeterRow->Hide();
+	// Not resizable: fit the window to what it shows now.
+	ResizeToPreferred();
 }
 
 
 bool
 PlayerWindow::ShowsWindowMeter() const
 {
-	return !fMeter->IsHidden(fMeter);
+	return !fMeterRow->IsHidden(fMeterRow);
 }

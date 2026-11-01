@@ -16,7 +16,9 @@
 float
 ControlUnit()
 {
-	return roundf(22.0f * be_plain_font->Size() / 12.0f);
+	// 22 px, the original's buttons, growing with a larger system font
+	// but never smaller than the original.
+	return fmaxf(22.0f, roundf(22.0f * be_plain_font->Size() / 12.0f));
 }
 
 
@@ -72,8 +74,8 @@ SymbolButton::Draw(BRect updateRect)
 	be_control_look->DrawButtonBackground(this, rect, updateRect, base,
 		flags);
 
-	// The symbol, in a square about half the button's size
-	float size = floorf(Bounds().Height() * 0.45f);
+	// The symbol, a little over half the button's size, as in the original
+	float size = floorf(Bounds().Height() * 0.55f);
 	if (size < 7)
 		size = 7;
 	BPoint c(floorf((Bounds().left + Bounds().right) / 2) + 0.5f,

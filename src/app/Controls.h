@@ -11,8 +11,8 @@
 #include <Control.h>
 
 
-// The size of the original's controls at the default 12 pt font; scaled
-// with the font.
+// The size of the original's controls (22 px), larger with a system font
+// over 12 pt, never smaller.
 float ControlUnit();
 
 

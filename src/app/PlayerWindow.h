@@ -60,6 +60,7 @@ private:
 			BMenuItem*			fRepeatItem;
 			BMenuItem*			fDeskbarItem;
 			BMenuItem*			fWindowMeterItem;
+			BView*				fMeterRow;
 			VUView*				fMeter;
 			bool				fShowRemaining;
 			double				fLastPosition;
