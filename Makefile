@@ -1,0 +1,124 @@
+# PowerPlay — builds on Haiku and on Linux with Cosmoe from the same sources.
+# Generic beos-app-platforms template: fill in SRCS, the extra LIBS, and the
+# test target; keep the platform branches as they are.
+#
+#   make          -> ./PowerPlay
+#   make test     -> host-side unit tests (any OS, no Haiku API needed)
+#   make install  -> copies the app to your apps folder
+#
+# Contract the packaging scripts rely on:
+#   - `make` leaves the binary at ./$(NAME) and the compiled resources at
+#     obj/$(NAME).rsrc (Haiku) or obj/$(NAME).rsrc.o (Cosmoe);
+#   - CXXFLAGS/LDFLAGS from the command line ADD to ours (override +=);
+#   - COSMOE_ROOT selects the Cosmoe install;
+#   - HAIKU_CROSS=1 (with tools/haiku-arm64's env.sh sourced) cross-compiles for
+#     Haiku arm64.
+
+NAME     := PowerPlay
+RDEF     := PowerPlay.rdef
+CXX      ?= g++
+CXXFLAGS ?= -O2 -g
+override CXXFLAGS += -std=c++17 -Wall -Wno-multichar
+UNAME    := $(shell uname -s)
+COSMOE_ROOT ?= /usr
+
+# All .cpp files, with their directories. Header dirs go in INCLUDES.
+CORE_SRCS := src/core/VUMeter.cpp
+SRCS     := $(CORE_SRCS) src/app/App.cpp src/app/DeskbarVU.cpp \
+            src/app/Player.cpp src/app/PlayerWindow.cpp src/app/VUView.cpp
+INCLUDES := src/core src/app
+# Libraries beyond the Haiku API (same on every platform), e.g. -lsqlite3 -lcrypto.
+# An app that uses B_TRANSLATE needs -llocalestub (Haiku and Hokku both ship it).
+APP_LIBS := -lmedia
+# Files the .rdef imports (icons, PNG resources), so changing one rebuilds
+RSRC_DEPS :=
+
+override CXXFLAGS += $(addprefix -I,$(INCLUDES))
+
+ifneq ($(HAIKU_CROSS),)
+  # Haiku arm64, cross-compiled on Linux: . <work>/env.sh from
+  # tools/haiku-arm64/make-sysroot.sh, then make HAIKU_CROSS=1
+  PLATFORM     := Haiku
+  override CXXFLAGS += $(HAIKU_CROSS_CFLAGS)
+  override LDFLAGS  += $(HAIKU_CROSS_LDFLAGS)
+  LIBS         := -lbe -ltracker -ltranslation -lnetwork $(APP_LIBS)
+  RESOURCES     = rc -o obj/$(NAME).rsrc $(RDEF) && xres -o $@ obj/$(NAME).rsrc
+else ifeq ($(UNAME),Haiku)
+  PLATFORM     := Haiku
+  LIBS         := -lbe -ltracker -ltranslation -lnetwork $(APP_LIBS)
+  INSTALL_DIR  := $(shell finddir B_USER_NONPACKAGED_DIRECTORY)/apps
+  RESOURCES     = rc -o obj/$(NAME).rsrc $(RDEF) && xres -o $@ obj/$(NAME).rsrc
+else ifneq ($(wildcard $(COSMOE_ROOT)/include/os/app/Application.h),)
+  # Plain Linux with Cosmoe (the Haiku API as a library on X11/Wayland)
+  PLATFORM    := Cosmoe
+  COSMOE_DIRS := config os os/app os/game os/interface os/kernel os/locale \
+                 os/media os/net os/storage os/support os/translation \
+                 os/be_apps/Tracker private/interface private/shared \
+                 private/support posix
+  override CXXFLAGS += -I$(COSMOE_ROOT)/include \
+                 $(addprefix -I$(COSMOE_ROOT)/include/,$(COSMOE_DIRS)) \
+                 -DAPP_COSMOE -fPIC
+  # libbe finds Cosmoe's add-ons and data next to itself, so the AppImage
+  # (bin/App + lib/) works wherever it is mounted.
+  COSMOE_RPATH ?= $$ORIGIN/../lib
+  LIBS        := -L$(COSMOE_ROOT)/lib -lbe -ltracker $(APP_LIBS) \
+                 -Wl,-rpath,'$(COSMOE_RPATH)'
+  INSTALL_DIR := $(HOME)/.local/bin
+  # Cosmoe reads resources from a .cosmoe_rsrc section linked into the app
+  EXTRA_OBJS  := obj/$(NAME).rsrc.o
+  RESOURCES    = true
+else
+  PLATFORM     := none
+endif
+
+OBJS := $(patsubst %.cpp,obj/%.o,$(SRCS))
+
+all: check-platform $(NAME)
+
+check-platform:
+ifeq ($(PLATFORM),none)
+	@echo "$(NAME) needs Haiku, or Linux with Cosmoe."
+	@echo "Linux: Cosmoe installed under COSMOE_ROOT=$(COSMOE_ROOT)."
+	@false
+endif
+
+obj/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
+# Header dependencies, so editing a header rebuilds what includes it
+-include $(OBJS:.o=.d)
+
+obj/$(NAME).rsrc.o: $(RDEF) $(RSRC_DEPS)
+	@mkdir -p obj
+	LD_LIBRARY_PATH=$(COSMOE_ROOT)/lib $(COSMOE_ROOT)/bin/rc -o obj/$(NAME).rsrc $(RDEF)
+	cd obj && ld -r -b binary $(NAME).rsrc -o $(NAME).rsrc.o
+	objcopy --rename-section .data=.cosmoe_rsrc \
+		--add-section .note.GNU-stack=/dev/null \
+		--set-section-flags .note.GNU-stack=noload,readonly obj/$(NAME).rsrc.o
+
+$(NAME): $(OBJS) $(EXTRA_OBJS) $(RDEF) $(RSRC_DEPS)
+	@mkdir -p obj
+	$(CXX) $(LDFLAGS) $(OBJS) $(EXTRA_OBJS) -o $@ $(LIBS)
+	$(RESOURCES)
+	@if command -v mimeset >/dev/null 2>&1; then mimeset -f $@; fi
+
+hpkg:
+	sh packaging/build-hpkg.sh
+
+# Host-side tests: only portable code, no Haiku headers.
+test: tests/test_core.cpp $(CORE_SRCS) src/core/*.h
+	@mkdir -p obj
+	$(CXX) -std=c++17 -Wall -O1 -g -Isrc/core tests/test_core.cpp \
+		$(CORE_SRCS) -o obj/test_core
+	./obj/test_core
+
+install: all
+	mkdir -p "$(INSTALL_DIR)"
+	cp $(NAME) "$(INSTALL_DIR)/"
+	@if command -v mimeset >/dev/null 2>&1; then mimeset -f "$(INSTALL_DIR)/$(NAME)"; fi
+
+clean:
+	rm -rf obj $(NAME)
+
+.PHONY: all check-platform test install clean hpkg

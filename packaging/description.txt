@@ -1,0 +1,3 @@
+PowerPlay plays audio files and shows their level on a small analog VU meter that can sit in the Deskbar. Click the meter for play controls.
+
+PowerPlay is a new program inspired by SoundPlay, the BeOS player by Marco Nelissen. It shares no code with it.

@@ -1,0 +1,11 @@
+# Reference material from the original SoundPlay: never in the public tree
+vm/
+SoundPlay-*.zip
+
+/PowerPlay
+obj/
+dist/
+*.hpkg
+*.AppImage
+.cosmoe/
+.haiku-headers/
