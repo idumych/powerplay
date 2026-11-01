@@ -14,7 +14,7 @@ measured from screenshots.
 | VU ballistics (300 ms, calibrated to the test tones) | done, host tests |
 | Meter face drawn pixel by pixel, matched to the original | done, host tests; checked on Haiku R1/beta6 |
 | Deskbar meter with a play-controls menu | runs on Haiku R1/beta6 |
-| Playing a file (BMediaFile + BSoundPlayer) | builds; not yet heard: the test VM has no sound card |
+| Playing a file (BMediaFile + BSoundPlayer) | WAV played on Haiku R1/beta6 in QEMU (emulated HDA, output captured): full length, no dropouts, level unchanged |
 | Playlist, main window like SoundPlay's | not started |
 | Linux (Hokku) | not built yet |
 
