@@ -16,7 +16,7 @@ measured from screenshots.
 | Deskbar meter with a play-controls menu | runs on Haiku R1/beta6 |
 | Playing a file (BMediaFile + BSoundPlayer) | WAV played on Haiku R1/beta6 in QEMU (emulated HDA, output captured): full length, no dropouts, level unchanged |
 | Playlist, main window like SoundPlay's | not started |
-| Linux (Hokku) | not built yet |
+| Linux (Hokku) | builds unchanged against Hokku 29097935 and opens under Xvfb (X11): window, meter, About; no Deskbar on Linux yet; sound not tried |
 
 ## Building
 
