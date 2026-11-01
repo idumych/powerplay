@@ -3,6 +3,12 @@
  *
  * Copyright 2026 the PowerPlay authors. MIT licence.
  */
+#if __has_include(<AboutWindow.h>)
+#	include <AboutWindow.h>
+#else
+	// Haiku R1/beta6 has BAboutWindow in libbe with a private header.
+#	include <private/interface/AboutWindow.h>
+#endif
 #include <Alert.h>
 #include <Application.h>
 #include <Deskbar.h>
@@ -238,14 +244,12 @@ PowerPlayApp::MessageReceived(BMessage* message)
 
 		case kMsgAbout:
 		{
-			BAlert* alert = new BAlert("About PowerPlay",
-				"PowerPlay 0.1.0\n\n"
-				"An audio player with a VU meter in the Deskbar.\n\n"
-				"Copyright 2026 the PowerPlay authors.\n"
-				"Distributed under the MIT licence.",
-				"Close");
-			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
-			alert->Go(NULL);
+			BAboutWindow* about = new BAboutWindow(kAppName, kAppSignature);
+			about->AddDescription(
+				"An audio player with a VU meter in the Deskbar.");
+			about->AddCopyright(2026, "the PowerPlay authors");
+			about->AddExtraInfo("Distributed under the MIT licence.");
+			about->Show();
 			break;
 		}
 
