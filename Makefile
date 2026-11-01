@@ -23,9 +23,10 @@ UNAME    := $(shell uname -s)
 COSMOE_ROOT ?= /usr
 
 # All .cpp files, with their directories. Header dirs go in INCLUDES.
-CORE_SRCS := src/core/VUMeter.cpp
-SRCS     := $(CORE_SRCS) src/app/App.cpp src/app/DeskbarVU.cpp \
-            src/app/Player.cpp src/app/PlayerWindow.cpp src/app/VUView.cpp
+CORE_SRCS := src/core/VUMeter.cpp src/core/PlayHead.cpp src/core/Playlist.cpp
+SRCS     := $(CORE_SRCS) src/app/App.cpp src/app/Controls.cpp \
+            src/app/DeskbarVU.cpp src/app/Player.cpp src/app/PlayerWindow.cpp \
+            src/app/PlaylistWindow.cpp src/app/VUView.cpp
 INCLUDES := src/core src/app
 # Libraries beyond the Haiku API (same on every platform), e.g. -lsqlite3 -lcrypto.
 # An app that uses B_TRANSLATE needs -llocalestub (Haiku and Hokku both ship it).
@@ -107,11 +108,14 @@ hpkg:
 	sh packaging/build-hpkg.sh
 
 # Host-side tests: only portable code, no Haiku headers.
-test: tests/test_core.cpp $(CORE_SRCS) src/core/*.h
+test: tests/test_core.cpp tests/test_audio.cpp $(CORE_SRCS) src/core/*.h
 	@mkdir -p obj
 	$(CXX) -std=c++17 -Wall -O1 -g -Isrc/core tests/test_core.cpp \
-		$(CORE_SRCS) -o obj/test_core
+		src/core/VUMeter.cpp -o obj/test_core
+	$(CXX) -std=c++17 -Wall -O1 -g -pthread -Isrc/core tests/test_audio.cpp \
+		src/core/PlayHead.cpp src/core/Playlist.cpp -o obj/test_audio
 	./obj/test_core
+	./obj/test_audio
 
 install: all
 	mkdir -p "$(INSTALL_DIR)"

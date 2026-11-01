@@ -13,33 +13,92 @@
 #include <Application.h>
 #include <Deskbar.h>
 #include <Directory.h>
+#include <Entry.h>
 #include <File.h>
 #include <FilePanel.h>
 #include <FindDirectory.h>
 #include <MessageRunner.h>
+#include <NodeInfo.h>
 #include <Path.h>
 #include <PropertyInfo.h>
 #include <Screen.h>
 
+#include <algorithm>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
+#include <string>
 #include <vector>
 
 #include "Constants.h"
 #include "DeskbarVU.h"
 #include "Player.h"
 #include "PlayerWindow.h"
+#include "Playlist.h"
+#include "PlaylistWindow.h"
 
 static const char* kSettingsName = "PowerPlay_settings";
 
-// Scripting, for tests and for hey: the needles' deflection.
+// Scripting, for tests and for hey.
 static property_info sProperties[] = {
 	{ "Levels", { B_GET_PROPERTY, 0 }, { B_DIRECT_SPECIFIER, 0 },
 		"Returns the needles' deflection and whether PowerPlay is playing, "
 		"as \"left=L right=R playing=0|1\" (1.0 = full scale).", 0,
 		{ B_STRING_TYPE } },
+	{ "Status", { B_GET_PROPERTY, 0 }, { B_DIRECT_SPECIFIER, 0 },
+		"Returns what's playing: \"index=I count=N file=NAME speed=S "
+		"position=P duration=D playing=0|1 starved=K\".", 0,
+		{ B_STRING_TYPE } },
 	{ 0 }
 };
+
+// Files a folder contributes: what the system says is audio, or has an
+// audio file's extension when it has no type yet.
+static const char* kAudioExtensions[] = {
+	"wav", "aif", "aiff", "aifc", "au", "snd", "mp3", "mp2", "ogg", "oga",
+	"opus", "flac", "m4a", "aac", "wma", "mod", "xm", "s3m", "it", "mid",
+	"midi", NULL
+};
+
+
+static bool
+HasExtension(const char* name, const char* const* extensions)
+{
+	const char* dot = strrchr(name, '.');
+	if (dot == NULL)
+		return false;
+	for (int32 i = 0; extensions[i] != NULL; i++) {
+		if (strcasecmp(dot + 1, extensions[i]) == 0)
+			return true;
+	}
+	return false;
+}
+
+
+static bool
+IsPlaylistFile(const BEntry& entry, const char* name)
+{
+	static const char* kPlaylist[] = {"m3u", "m3u8", NULL};
+	if (HasExtension(name, kPlaylist))
+		return true;
+	BNode node(&entry);
+	char type[B_MIME_TYPE_LENGTH];
+	return BNodeInfo(&node).GetType(type) == B_OK
+		&& (strcasecmp(type, "audio/x-mpegurl") == 0
+			|| strcasecmp(type, "audio/mpegurl") == 0);
+}
+
+
+static bool
+IsAudioFile(const BEntry& entry, const char* name)
+{
+	BNode node(&entry);
+	char type[B_MIME_TYPE_LENGTH];
+	if (BNodeInfo(&node).GetType(type) == B_OK)
+		return strncasecmp(type, "audio/", 6) == 0;
+	return HasExtension(name, kAudioExtensions);
+}
 
 
 class PowerPlayApp : public BApplication {
@@ -59,19 +118,45 @@ public:
 
 private:
 			bool				_HandleScripting(BMessage* message);
-			void				_Open(const entry_ref& ref);
+			void				_Collect(const BMessage* message,
+									std::vector<std::string>& paths);
+			void				_CollectEntry(BEntry& entry, bool explicitly,
+									std::vector<std::string>& paths,
+									int depth);
+			void				_AddToPlaylist(const BMessage* message,
+									bool replace);
+			bool				_Load(int32 index, bool atEnd, bool play,
+									bool alertOnError = false);
+			void				_PlayPause(bool backwards);
+			void				_Advance(bool backwards, bool wrap);
+			void				_RemoveFromPlaylist(BMessage* message);
+			void				_PlaylistChanged();
+			void				_ShowPlaylist();
 			void				_UpdateWindow();
 			void				_PublishLevels();
 			void				_ToggleDeskbar();
+			void				_ShowFilePanel(bool add);
 			void				_LoadSettings();
 			void				_SaveSettings();
 
 			Player				fPlayer;
+			audio::Playlist		fPlaylist;
 			PlayerWindow*		fWindow;
+			PlaylistWindow*		fPlaylistWindow;
 			BFilePanel*			fOpenPanel;
+			BFilePanel*			fAddPanel;
 			BMessageRunner*		fMeterRunner;
 			std::vector<BMessenger> fMeters;
+			int32				fTicks;
+
+			// Settings
 			BRect				fWindowFrame;
+			BRect				fPlaylistFrame;
+			float				fVolume;	// the knob, 0..1
+			bool				fRepeat;
+			bool				fWindowMeter;
+			bool				fPlaylistShown;
+			double				fResumePosition;
 };
 
 
@@ -79,12 +164,30 @@ PowerPlayApp::PowerPlayApp()
 	:
 	BApplication(kAppSignature),
 	fWindow(NULL),
+	fPlaylistWindow(NULL),
 	fOpenPanel(NULL),
+	fAddPanel(NULL),
 	fMeterRunner(NULL),
-	fWindowFrame(100, 100, 420, 200)
+	fTicks(0),
+	fWindowFrame(100, 100, 480, 200),
+	fPlaylistFrame(100, 260, 420, 560),
+	fVolume(0.8f),
+	fRepeat(false),
+#ifdef APP_COSMOE
+	// No Deskbar to put the meter in
+	fWindowMeter(true),
+#else
+	fWindowMeter(false),
+#endif
+	fPlaylistShown(false),
+	fResumePosition(0)
 {
 	_LoadSettings();
 	fWindow = new PlayerWindow(fWindowFrame);
+	fWindow->SetVolume(fVolume);
+	fWindow->SetRepeat(fRepeat);
+	fWindow->SetWindowMeter(fWindowMeter);
+	fPlayer.SetVolume(fVolume * fVolume);
 }
 
 
@@ -92,6 +195,7 @@ PowerPlayApp::~PowerPlayApp()
 {
 	delete fMeterRunner;
 	delete fOpenPanel;
+	delete fAddPanel;
 }
 
 
@@ -101,7 +205,16 @@ PowerPlayApp::ReadyToRun()
 	BMessage publish(kMsgPublishLevels);
 	fMeterRunner = new BMessageRunner(BMessenger(this), &publish,
 		kMeterInterval);
+
+	// The playlist from last time, ready where it was but not playing.
+	// (Files given at launch arrive before this and replace it.)
+	if (!fPlayer.HasFile() && fPlaylist.Current() != audio::Playlist::kNone
+		&& _Load(fPlaylist.Current(), false, false))
+		fPlayer.Seek(fResumePosition);
+	_UpdateWindow();
 	fWindow->Show();
+	if (fPlaylistShown)
+		_ShowPlaylist();
 }
 
 
@@ -124,10 +237,9 @@ PowerPlayApp::ArgvReceived(int32 argc, char** argv)
 void
 PowerPlayApp::RefsReceived(BMessage* message)
 {
-	// One file for now; a playlist comes later.
-	entry_ref ref;
-	if (message->FindRef("refs", &ref) == B_OK)
-		_Open(ref);
+	// Opened, dropped on the controller, or from Tracker: these become the
+	// playlist.
+	_AddToPlaylist(message, true);
 }
 
 
@@ -165,13 +277,22 @@ PowerPlayApp::_HandleScripting(BMessage* message)
 			what, property) < 0)
 		return false;
 
-	float left, right;
-	fPlayer.Levels(left, right);
-	BString levels;
-	levels.SetToFormat("left=%.4f right=%.4f playing=%d", left, right,
-		fPlayer.IsPlaying() ? 1 : 0);
+	BString result;
+	if (strcmp(property, "Levels") == 0) {
+		float left, right;
+		fPlayer.Levels(left, right);
+		result.SetToFormat("left=%.4f right=%.4f playing=%d", left, right,
+			fPlayer.IsPlaying() ? 1 : 0);
+	} else {
+		result.SetToFormat("index=%d count=%d file=%s speed=%.2f "
+			"position=%.2f duration=%.2f playing=%d starved=%" B_PRId32,
+			fPlaylist.Current(), fPlaylist.CountItems(),
+			fPlayer.HasFile() ? fPlayer.FileName() : "-", fPlayer.Speed(),
+			fPlayer.Position(), fPlayer.Duration(),
+			fPlayer.IsPlaying() ? 1 : 0, fPlayer.StarvedBlocks());
+	}
 	BMessage reply(B_REPLY);
-	reply.AddString("result", levels);
+	reply.AddString("result", result);
 	reply.AddInt32("error", B_OK);
 	message->SendReply(&reply);
 	return true;
@@ -186,19 +307,17 @@ PowerPlayApp::MessageReceived(BMessage* message)
 
 	switch (message->what) {
 		case kMsgOpen:
-			if (fOpenPanel == NULL) {
-				fOpenPanel = new BFilePanel(B_OPEN_PANEL, NULL, NULL,
-					B_FILE_NODE, false);
-			}
-			fOpenPanel->Show();
+			_ShowFilePanel(false);
+			break;
+		case kMsgAddFiles:
+			_ShowFilePanel(true);
 			break;
 
 		case kMsgPlayPause:
-			if (fPlayer.IsPlaying())
-				fPlayer.Pause();
-			else
-				fPlayer.Play();
-			_UpdateWindow();
+			_PlayPause(false);
+			break;
+		case kMsgReverse:
+			_PlayPause(true);
 			break;
 
 		case kMsgStop:
@@ -206,17 +325,122 @@ PowerPlayApp::MessageReceived(BMessage* message)
 			_UpdateWindow();
 			break;
 
+		case kMsgNext:
+			_Advance(false, fRepeat);
+			break;
+
+		case kMsgPrevious:
+			// Back to the start of this one first, as CD players do.
+			if (fPlayer.HasFile() && fPlayer.Speed() >= 0
+				&& fPlayer.Position() > 3.0) {
+				fPlayer.Seek(0);
+				_UpdateWindow();
+			} else
+				_Advance(true, fRepeat);
+			break;
+
 		case kMsgPlaybackEnded:
+		{
+			// On to the next file; playing backwards, to the previous one,
+			// from its end, so a whole playlist plays backwards.
+			bool backwards = message->GetBool("backwards", false);
+			int32 next = backwards ? fPlaylist.Previous(fRepeat)
+				: fPlaylist.Next(fRepeat);
+			if (next != audio::Playlist::kNone)
+				_Load(next, backwards, true);
 			_UpdateWindow();
+			break;
+		}
+
+		case kMsgSetSpeed:
+		{
+			float percent;
+			if (message->FindFloat("speed", &percent) == B_OK) {
+				fPlayer.SetSpeed(percent / 100.0);
+				_UpdateWindow();
+			}
+			break;
+		}
+
+		case kMsgSeek:
+		{
+			float value;
+			if (message->FindFloat("fraction", &value) == B_OK)
+				fPlayer.Seek(value * fPlayer.Duration());
+			else if (message->FindFloat("position", &value) == B_OK)
+				fPlayer.Seek(value);
+			_UpdateWindow();
+			break;
+		}
+
+		case kMsgSetVolume:
+		{
+			float volume;
+			if (message->FindFloat("volume", &volume) == B_OK) {
+				fVolume = volume < 0 ? 0 : volume > 1 ? 1 : volume;
+				// The knob turns evenly in loudness, not in gain.
+				fPlayer.SetVolume(fVolume * fVolume);
+			}
+			break;
+		}
+
+		case kMsgToggleRepeat:
+			fRepeat = !fRepeat;
+			if (fWindow->Lock()) {
+				fWindow->SetRepeat(fRepeat);
+				fWindow->Unlock();
+			}
+			break;
+
+		case kMsgShowPlaylist:
+			_ShowPlaylist();
+			break;
+
+		case kMsgPlaylistAdd:
+			_AddToPlaylist(message, false);
+			break;
+
+		case kMsgPlaylistPlay:
+		{
+			int32 index;
+			if (message->FindInt32("index", &index) == B_OK) {
+				if (fPlayer.Speed() < 0)
+					fPlayer.SetSpeed(-fPlayer.Speed());
+				_Load(index, false, true, true);
+			}
+			break;
+		}
+
+		case kMsgPlaylistRemove:
+			_RemoveFromPlaylist(message);
+			break;
+
+		case kMsgPlaylistClear:
+			fPlayer.Close();
+			fPlaylist.Clear();
+			_PlaylistChanged();
+			break;
+
+		case kMsgPlaylistSortName:
+			fPlaylist.SortByName();
+			_PlaylistChanged();
+			break;
+		case kMsgPlaylistSortPath:
+			fPlaylist.SortByPath();
+			_PlaylistChanged();
+			break;
+		case kMsgPlaylistShuffle:
+			fPlaylist.Shuffle((uint32)system_time());
+			_PlaylistChanged();
 			break;
 
 		case kMsgShowWindow:
-			if (fWindow->LockLooper()) {
+			if (fWindow->Lock()) {
 				if (fWindow->IsHidden())
 					fWindow->Show();
 				else
 					fWindow->Activate();
-				fWindow->UnlockLooper();
+				fWindow->Unlock();
 			}
 			break;
 
@@ -242,6 +466,14 @@ PowerPlayApp::MessageReceived(BMessage* message)
 			_ToggleDeskbar();
 			break;
 
+		case kMsgToggleWindowMeter:
+			if (fWindow->Lock()) {
+				fWindowMeter = !fWindow->ShowsWindowMeter();
+				fWindow->SetWindowMeter(fWindowMeter);
+				fWindow->Unlock();
+			}
+			break;
+
 		case kMsgAbout:
 		{
 			BAboutWindow* about = new BAboutWindow(kAppName, kAppSignature);
@@ -262,6 +494,7 @@ PowerPlayApp::MessageReceived(BMessage* message)
 bool
 PowerPlayApp::QuitRequested()
 {
+	fResumePosition = fPlayer.Position();
 	fPlayer.Close();
 
 	// Leave the Deskbar meter at rest rather than frozen mid-swing.
@@ -272,6 +505,12 @@ PowerPlayApp::QuitRequested()
 	for (BMessenger& meter : fMeters)
 		meter.SendMessage(&rest, (BHandler*)NULL, 0);
 
+	if (fPlaylistWindow != NULL && fPlaylistWindow->Lock()) {
+		fPlaylistFrame = fPlaylistWindow->Frame();
+		fPlaylistShown = !fPlaylistWindow->IsHidden();
+		fPlaylistWindow->Quit();
+		fPlaylistWindow = NULL;
+	}
 	if (fWindow->Lock()) {
 		fWindowFrame = fWindow->Frame();
 		fWindow->Quit();
@@ -281,21 +520,250 @@ PowerPlayApp::QuitRequested()
 }
 
 
+//	#pragma mark - Playlist
+
+
 void
-PowerPlayApp::_Open(const entry_ref& ref)
+PowerPlayApp::_Collect(const BMessage* message,
+	std::vector<std::string>& paths)
 {
-	status_t status = fPlayer.Open(ref);
-	if (status != B_OK) {
-		BString text;
-		text.SetToFormat("PowerPlay can't play \"%s\".\n\n%s", ref.name,
-			strerror(status));
-		BAlert* alert = new BAlert("Can't play", text.String(), "OK",
-			NULL, NULL, B_WIDTH_AS_USUAL, B_STOP_ALERT);
-		alert->Go(NULL);
-	} else
+	entry_ref ref;
+	for (int32 i = 0; message->FindRef("refs", i, &ref) == B_OK; i++) {
+		BEntry entry(&ref, true);
+		_CollectEntry(entry, true, paths, 0);
+	}
+}
+
+
+// Folders are searched (sorted by name) for audio files; playlists are
+// read; a file given by itself is taken whatever its type, so the player
+// can say if it can't play it.
+void
+PowerPlayApp::_CollectEntry(BEntry& entry, bool explicitly,
+	std::vector<std::string>& paths, int depth)
+{
+	BPath path;
+	if (entry.InitCheck() != B_OK || entry.GetPath(&path) != B_OK)
+		return;
+
+	if (entry.IsDirectory()) {
+		if (depth > 8)
+			return;
+		BDirectory directory(&entry);
+		std::vector<std::string> children;
+		BEntry child;
+		while (directory.GetNextEntry(&child, true) == B_OK) {
+			BPath childPath;
+			if (child.GetPath(&childPath) == B_OK)
+				children.push_back(childPath.Path());
+		}
+		std::sort(children.begin(), children.end(),
+			[](const std::string& a, const std::string& b) {
+				return strcasecmp(a.c_str(), b.c_str()) < 0;
+			});
+		for (const std::string& childPath : children) {
+			BEntry childEntry(childPath.c_str(), true);
+			_CollectEntry(childEntry, false, paths, depth + 1);
+		}
+		return;
+	}
+
+	if (IsPlaylistFile(entry, path.Leaf())) {
+		BFile file(&entry, B_READ_ONLY);
+		off_t size = 0;
+		if (file.GetSize(&size) != B_OK || size > 16 * 1024 * 1024)
+			return;
+		std::string text(size, '\0');
+		file.Read(&text[0], size);
+		BPath folder;
+		path.GetParent(&folder);
+		audio::Playlist list;
+		list.Load(text, folder.Path());
+		for (int32 i = 0; i < list.CountItems(); i++)
+			paths.push_back(list.PathAt(i));
+		return;
+	}
+
+	if (explicitly || IsAudioFile(entry, path.Leaf()))
+		paths.push_back(path.Path());
+}
+
+
+void
+PowerPlayApp::_AddToPlaylist(const BMessage* message, bool replace)
+{
+	std::vector<std::string> paths;
+	_Collect(message, paths);
+	if (paths.empty())
+		return;
+
+	if (replace) {
+		fPlaylist.Clear();
+		for (const std::string& path : paths)
+			fPlaylist.Add(path);
+		if (fPlayer.Speed() < 0)
+			fPlayer.SetSpeed(-fPlayer.Speed());
+		_Load(0, false, true, paths.size() == 1);
+	} else {
+		int32 index = message->GetInt32("index", -1);
+		bool wasEmpty = fPlaylist.CountItems() == 0;
+		int32 first = -1;
+		for (const std::string& path : paths) {
+			int32 at = fPlaylist.Add(path, index);
+			if (first < 0)
+				first = at;
+			if (index >= 0)
+				index = at + 1;
+		}
+		// Nothing loaded yet: start with what was just added.
+		if (wasEmpty || !fPlayer.HasFile())
+			_Load(first, false, true);
+	}
+	_PlaylistChanged();
+}
+
+
+// Loads playlist entry index (from its end when atEnd, for playing
+// backwards). A file that can't be played is skipped in the direction of
+// play, unless the user picked it alone, which gets an alert instead.
+bool
+PowerPlayApp::_Load(int32 index, bool atEnd, bool play, bool alertOnError)
+{
+	int32 tries = fPlaylist.CountItems();
+	while (index >= 0 && index < fPlaylist.CountItems() && tries-- > 0) {
+		fPlaylist.SetCurrent(index);
+		entry_ref ref;
+		status_t status = get_ref_for_path(fPlaylist.PathAt(index).c_str(),
+			&ref);
+		if (status == B_OK)
+			status = fPlayer.Open(ref, atEnd);
+		if (status == B_OK) {
+			if (play)
+				fPlayer.Play();
+			_UpdateWindow();
+			_PlaylistChanged();
+			return true;
+		}
+
+		fprintf(stderr, "PowerPlay: can't play %s: %s\n",
+			fPlaylist.PathAt(index).c_str(), strerror(status));
+		if (alertOnError) {
+			BString text;
+			text.SetToFormat("PowerPlay can't play \"%s\".\n\n%s",
+				fPlaylist.NameAt(index).c_str(), strerror(status));
+			BAlert* alert = new BAlert("Can't play", text.String(), "OK",
+				NULL, NULL, B_WIDTH_AS_USUAL, B_STOP_ALERT);
+			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+			alert->Go(NULL);
+			break;
+		}
+		index = atEnd ? fPlaylist.Previous(false) : fPlaylist.Next(false);
+	}
+	_UpdateWindow();
+	_PlaylistChanged();
+	return false;
+}
+
+
+void
+PowerPlayApp::_PlayPause(bool backwards)
+{
+	if (!fPlayer.HasFile()) {
+		if (fPlaylist.CountItems() == 0) {
+			_ShowFilePanel(false);
+			return;
+		}
+		int32 index = fPlaylist.Current() != audio::Playlist::kNone
+			? fPlaylist.Current() : 0;
+		if (!_Load(index, backwards, false))
+			return;
+	}
+
+	double speed = fPlayer.Speed();
+	bool goingBackwards = speed < 0;
+	if (fPlayer.IsPlaying() && goingBackwards == backwards) {
+		fPlayer.Pause();
+	} else {
+		// The direction of the button pressed, at the current speed.
+		if (speed == 0)
+			speed = 1;
+		fPlayer.SetSpeed(backwards ? -fabs(speed) : fabs(speed));
 		fPlayer.Play();
+	}
 	_UpdateWindow();
 }
+
+
+void
+PowerPlayApp::_Advance(bool backwards, bool wrap)
+{
+	int32 index = backwards ? fPlaylist.Previous(wrap)
+		: fPlaylist.Next(wrap);
+	if (index == audio::Playlist::kNone)
+		return;
+	bool playing = fPlayer.IsPlaying();
+	_Load(index, fPlayer.Speed() < 0, playing);
+}
+
+
+void
+PowerPlayApp::_RemoveFromPlaylist(BMessage* message)
+{
+	std::vector<int32> indices;
+	int32 index;
+	for (int32 i = 0; message->FindInt32("index", i, &index) == B_OK; i++)
+		indices.push_back(index);
+	std::sort(indices.rbegin(), indices.rend());
+
+	int32 current = fPlaylist.Current();
+	bool removedCurrent = std::find(indices.begin(), indices.end(), current)
+		!= indices.end();
+	for (int32 i : indices)
+		fPlaylist.Remove(i);
+
+	if (removedCurrent) {
+		// What was playing is gone: load what took its place.
+		bool playing = fPlayer.IsPlaying();
+		fPlayer.Close();
+		if (fPlaylist.Current() != audio::Playlist::kNone)
+			_Load(fPlaylist.Current(), false, playing);
+	}
+	_PlaylistChanged();
+	_UpdateWindow();
+}
+
+
+void
+PowerPlayApp::_PlaylistChanged()
+{
+	if (fPlaylistWindow == NULL)
+		return;
+	BMessage update(kMsgPlaylistUpdate);
+	for (int32 i = 0; i < fPlaylist.CountItems(); i++)
+		update.AddString("path", fPlaylist.PathAt(i).c_str());
+	update.AddInt32("current", fPlaylist.Current());
+	fPlaylistWindow->PostMessage(&update);
+}
+
+
+void
+PowerPlayApp::_ShowPlaylist()
+{
+	if (fPlaylistWindow == NULL) {
+		fPlaylistWindow = new PlaylistWindow(fPlaylistFrame);
+		_PlaylistChanged();
+	}
+	if (fPlaylistWindow->Lock()) {
+		if (fPlaylistWindow->IsHidden())
+			fPlaylistWindow->Show();
+		else
+			fPlaylistWindow->Activate();
+		fPlaylistWindow->Unlock();
+	}
+}
+
+
+//	#pragma mark - Window and meters
 
 
 void
@@ -303,8 +771,10 @@ PowerPlayApp::_UpdateWindow()
 {
 	if (!fWindow->Lock())
 		return;
-	fWindow->SetFileName(fPlayer.FileName());
-	fWindow->SetPlaying(fPlayer.IsPlaying(), fPlayer.HasFile());
+	fWindow->SetTitle(fPlayer.FileName(), fPlayer.FormatName());
+	fWindow->SetState(fPlayer.IsPlaying(), fPlayer.Speed(),
+		fPlayer.HasFile());
+	fWindow->SetPosition(fPlayer.Position(), fPlayer.Duration());
 	fWindow->Unlock();
 }
 
@@ -317,6 +787,9 @@ PowerPlayApp::_PublishLevels()
 
 	if (fWindow->Lock()) {
 		fWindow->SetLevels(left, right);
+		// The time and position bar ten times a second
+		if (++fTicks % 3 == 0)
+			fWindow->SetPosition(fPlayer.Position(), fPlayer.Duration());
 		fWindow->Unlock();
 	}
 
@@ -357,6 +830,25 @@ PowerPlayApp::_ToggleDeskbar()
 
 
 void
+PowerPlayApp::_ShowFilePanel(bool add)
+{
+	BFilePanel*& panel = add ? fAddPanel : fOpenPanel;
+	if (panel == NULL) {
+		BMessage message(add ? (uint32)kMsgPlaylistAdd
+			: (uint32)B_REFS_RECEIVED);
+		panel = new BFilePanel(B_OPEN_PANEL, NULL, NULL,
+			B_FILE_NODE | B_DIRECTORY_NODE, true, &message);
+		panel->Window()->SetTitle(add ? "PowerPlay: Add files"
+			: "PowerPlay: Open");
+	}
+	panel->Show();
+}
+
+
+//	#pragma mark - Settings
+
+
+void
 PowerPlayApp::_LoadSettings()
 {
 	BPath path;
@@ -367,10 +859,25 @@ PowerPlayApp::_LoadSettings()
 	BMessage settings;
 	if (file.InitCheck() != B_OK || settings.Unflatten(&file) != B_OK)
 		return;
+
+	BRect screen = BScreen().Frame();
 	BRect frame;
 	if (settings.FindRect("window frame", &frame) == B_OK
-		&& BScreen().Frame().Contains(frame.LeftTop() + BPoint(20, 10)))
+		&& screen.Contains(frame.LeftTop() + BPoint(20, 10)))
 		fWindowFrame = frame;
+	if (settings.FindRect("playlist frame", &frame) == B_OK
+		&& screen.Contains(frame.LeftTop() + BPoint(20, 10)))
+		fPlaylistFrame = frame;
+	fVolume = settings.GetFloat("volume", fVolume);
+	fRepeat = settings.GetBool("repeat", fRepeat);
+	fWindowMeter = settings.GetBool("window meter", fWindowMeter);
+	fPlaylistShown = settings.GetBool("playlist shown", false);
+
+	const char* entry;
+	for (int32 i = 0; settings.FindString("playlist", i, &entry) == B_OK; i++)
+		fPlaylist.Add(entry);
+	fPlaylist.SetCurrent(settings.GetInt32("current", -1));
+	fResumePosition = settings.GetDouble("position", 0);
 }
 
 
@@ -383,6 +890,15 @@ PowerPlayApp::_SaveSettings()
 		return;
 	BMessage settings;
 	settings.AddRect("window frame", fWindowFrame);
+	settings.AddRect("playlist frame", fPlaylistFrame);
+	settings.AddFloat("volume", fVolume);
+	settings.AddBool("repeat", fRepeat);
+	settings.AddBool("window meter", fWindowMeter);
+	settings.AddBool("playlist shown", fPlaylistShown);
+	for (int32 i = 0; i < fPlaylist.CountItems(); i++)
+		settings.AddString("playlist", fPlaylist.PathAt(i).c_str());
+	settings.AddInt32("current", fPlaylist.Current());
+	settings.AddDouble("position", fResumePosition);
 	BFile file(path.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
 	if (file.InitCheck() == B_OK)
 		settings.Flatten(&file);

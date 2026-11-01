@@ -112,6 +112,8 @@ DeskbarVU::MessageReceived(BMessage* message)
 
 		case kMsgPlayPause:
 		case kMsgStop:
+		case kMsgPrevious:
+		case kMsgNext:
 			BMessenger(kAppSignature).SendMessage(message);
 			break;
 
@@ -164,6 +166,12 @@ DeskbarVU::_ShowMenu(BPoint where)
 	item->SetEnabled(running);
 	menu->AddItem(item);
 	item = new BMenuItem("Stop", new BMessage(kMsgStop));
+	item->SetEnabled(running);
+	menu->AddItem(item);
+	item = new BMenuItem("Previous", new BMessage(kMsgPrevious));
+	item->SetEnabled(running);
+	menu->AddItem(item);
+	item = new BMenuItem("Next", new BMessage(kMsgNext));
 	item->SetEnabled(running);
 	menu->AddItem(item);
 	menu->AddSeparatorItem();

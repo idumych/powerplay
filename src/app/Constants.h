@@ -19,6 +19,30 @@ enum {
 	kMsgStop			= 'Stop',
 	kMsgShowWindow		= 'Show',
 	kMsgPlaybackEnded	= 'PEnd',	// posted by the player at end of file
+										// ("backwards": bool)
+	kMsgReverse			= 'Rvrs',	// play backwards
+	kMsgNext			= 'Next',
+	kMsgPrevious		= 'Prev',
+	kMsgSetSpeed		= 'Sped',	// "speed": float, percent (-400..400)
+	kMsgSeek			= 'Seek',	// "position": float, seconds, or
+										// "fraction": float, 0..1
+	kMsgSetVolume		= 'Volu',	// "volume": float, 0..1
+	kMsgToggleRepeat	= 'Rept',
+	kMsgToggleTime		= 'Time',	// elapsed / remaining
+
+	// The playlist. The app owns it and sends the editor a copy
+	// (kMsgPlaylistUpdate: "path" strings, "current" int32) after every
+	// change; the editor sends back what the user did.
+	kMsgShowPlaylist	= 'ShPl',
+	kMsgPlaylistUpdate	= 'PlUp',
+	kMsgPlaylistPlay	= 'PlPy',	// "index": int32
+	kMsgPlaylistRemove	= 'PlRm',	// "index": int32, any number
+	kMsgPlaylistAdd		= 'PlAd',	// "refs"; optional "index": int32
+	kMsgPlaylistClear	= 'PlCl',
+	kMsgPlaylistSortName = 'PlSN',
+	kMsgPlaylistSortPath = 'PlSP',
+	kMsgPlaylistShuffle	= 'PlSh',
+	kMsgAddFiles		= 'AddF',	// opens a file panel that adds
 
 	// The meter: a Deskbar meter subscribes with its messenger ("meter")
 	// and the app sends it levels ("left", "right": deflection, 1.0 = full
@@ -28,6 +52,7 @@ enum {
 	kMsgPublishLevels	= 'MPub',	// the app's own timer
 
 	kMsgToggleDeskbar	= 'TDsk',
+	kMsgToggleWindowMeter = 'TWMt',
 	kMsgAbout			= 'Abut'
 };
 

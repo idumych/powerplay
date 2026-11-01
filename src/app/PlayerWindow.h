@@ -1,5 +1,6 @@
 /*
- * PowerPlay — the main window: what's playing, the controls and a meter.
+ * PowerPlay — the controller: what's playing, the transport buttons, speed,
+ * position, volume and time, laid out like SoundPlay's.
  *
  * Copyright 2026 the PowerPlay authors. MIT licence.
  */
@@ -8,9 +9,13 @@
 
 #include <Window.h>
 
-class BButton;
+class BBox;
 class BMenuItem;
 class BStringView;
+class PositionBar;
+class SpeedSlider;
+class SymbolButton;
+class VolumeKnob;
 class VUView;
 
 
@@ -21,20 +26,44 @@ public:
 	virtual	bool				QuitRequested();
 	virtual	void				MenusBeginning();
 	virtual	void				MessageReceived(BMessage* message);
+	virtual	void				DispatchMessage(BMessage* message,
+									BHandler* handler);
 
 			// Called by the app, with the window locked
-			void				SetFileName(const char* name);
-			void				SetPlaying(bool playing, bool hasFile);
+			void				SetTitle(const char* fileName,
+									const char* formatName);
+			void				SetState(bool playing, double speed,
+									bool hasFile);
+			void				SetPosition(double position, double duration);
+			void				SetVolume(float volume);
+			void				SetRepeat(bool repeat);
 			void				SetLevels(float left, float right);
+			void				SetWindowMeter(bool show);
+			bool				ShowsWindowMeter() const;
 
 private:
-			BStringView*		fFileName;
-			BButton*			fPlayButton;
-			BButton*			fStopButton;
+			bool				_HandleShortcut(BMessage* message);
+
+			BBox*				fBox;
+			SymbolButton*		fPlayButton;
+			SymbolButton*		fReverseButton;
+			SymbolButton*		fStopButton;
+			SymbolButton*		fPreviousButton;
+			SymbolButton*		fNextButton;
+			SpeedSlider*		fSpeed;
+			PositionBar*		fPosition;
+			VolumeKnob*			fVolume;
+			BStringView*		fSpeedText;
+			BStringView*		fTimeText;
 			BMenuItem*			fPlayItem;
-			BMenuItem*			fStopItem;
+			BMenuItem*			fReverseItem;
+			BMenuItem*			fRepeatItem;
 			BMenuItem*			fDeskbarItem;
+			BMenuItem*			fWindowMeterItem;
 			VUView*				fMeter;
+			bool				fShowRemaining;
+			double				fLastPosition;
+			double				fLastDuration;
 };
 
 #endif	// POWERPLAY_PLAYER_WINDOW_H
