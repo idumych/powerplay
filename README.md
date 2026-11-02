@@ -12,14 +12,15 @@ meter's look was measured from screenshots.
 
 ## Screenshots
 
-![PowerPlay's controller, playlist and equalizer on Linux](docs/screenshots/linux-powerplay.png)
-
-PowerPlay's own look: the controller (speed slider from -400% to +400%,
-position bar, volume knob, VU meter), the playlist and the equalizer.
-
 ![PowerPlay on Haiku R1/beta6, with its meter in the Deskbar](docs/screenshots/haiku-powerplay.png)
 
-On Haiku R1/beta6, with the meter in the Deskbar.
+PowerPlay on Haiku R1/beta6: the controller (speed slider from -400% to
++400%, position bar, volume knob) and the equalizer, with the VU meter in the
+Deskbar.
+
+![PowerPlay's controller, playlist and equalizer on Linux](docs/screenshots/linux-powerplay.png)
+
+The same on Linux, with the playlist.
 
 ### Winamp skins
 
