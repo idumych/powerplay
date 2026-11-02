@@ -10,6 +10,7 @@
 #include <Autolock.h>
 #include <MediaFile.h>
 #include <MediaTrack.h>
+#include <Path.h>
 #include <SoundPlayer.h>
 
 #include <stdio.h>
@@ -154,7 +155,8 @@ Player::Open(const entry_ref& ref, bool atEnd)
 		fTrack = track;
 		fFormat = decoded;
 		fRef = ref;
-		fName = ref.name;
+		// The leaf name (on Linux an entry_ref's name is the whole path)
+		fName = BPath(&ref).Leaf();
 		fFormatName = formatName;
 		fCache = cache;
 		fHead.SetRates(decoded.frame_rate, fOutputRate);

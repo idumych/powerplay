@@ -7,7 +7,7 @@
 #include "Controls.h"
 
 #include <ControlLook.h>
-#include <GradientRadialFocus.h>
+#include <GradientLinear.h>
 #include <Window.h>
 
 #include <math.h>
@@ -19,23 +19,6 @@ ControlUnit()
 	// 22 px, the original's buttons, growing with a larger system font
 	// but never smaller than the original.
 	return fmaxf(22.0f, roundf(22.0f * be_plain_font->Size() / 12.0f));
-}
-
-
-static rgb_color
-Base()
-{
-	return ui_color(B_CONTROL_BACKGROUND_COLOR);
-}
-
-
-static rgb_color
-Ink(bool enabled)
-{
-	rgb_color text = ui_color(B_CONTROL_TEXT_COLOR);
-	if (!enabled)
-		text = tint_color(ui_color(B_PANEL_BACKGROUND_COLOR), B_DISABLED_LABEL_TINT);
-	return text;
 }
 
 
@@ -61,89 +44,147 @@ SymbolButton::SetSymbol(Symbol symbol)
 }
 
 
+// SoundPlay's button look, measured from the original: a dark grey outline
+// with its corners cut, a white highlight top and left inside a light grey
+// edge, two greys of shading bottom and right, and crisp black symbols on a
+// 23 px grid.
+static const rgb_color kOutline = {0x60, 0x60, 0x60, 255};
+static const rgb_color kFace = {0xe8, 0xe8, 0xe8, 255};
+static const rgb_color kHighlight = {0xf8, 0xfc, 0xf8, 255};
+static const rgb_color kShade = {0xd8, 0xd8, 0xd8, 255};
+static const rgb_color kShadow = {0x98, 0x98, 0x98, 255};
+static const rgb_color kSymbol = {0, 0, 0, 255};
+static const rgb_color kDarkEdge = {0x58, 0x58, 0x58, 255};
+static const rgb_color kGroove = {0x70, 0x70, 0x70, 255};
+static const rgb_color kKnobRim = {0x60, 0x64, 0x60, 255};
+static const rgb_color kKnobFace = {0xf0, 0xf0, 0xf0, 255};
+static const rgb_color kKnobLow = {0xb8, 0xbc, 0xb8, 255};
+static const rgb_color kKnobDot = {0xf8, 0x00, 0x00, 255};
+static const int32 kGrid = 23;
+
+
+// A run of symbol cells on the 23 px grid: row, first and last column.
+static void
+Cells(BView* view, BPoint origin, int32 k, int32 row, int32 first,
+	int32 last)
+{
+	view->FillRect(BRect(origin.x + first * k, origin.y + row * k,
+		origin.x + (last + 1) * k - 1, origin.y + (row + 1) * k - 1));
+}
+
+
+// The width of row r (0..10) of the big triangle: 1, 3, 5, 6, 8, 10 to the
+// middle and back, a slope of 0.9.
+static int32
+BigWidth(int32 r)
+{
+	int32 d = 5 - abs(r - 5);
+	return (int32)lroundf(1 + 1.8f * d);
+}
+
+
 void
 SymbolButton::Draw(BRect updateRect)
 {
-	BRect rect = Bounds();
-	rgb_color base = Base();
-	uint32 flags = be_control_look->Flags(this);
-	if (Value() == B_CONTROL_ON)
-		flags |= BControlLook::B_ACTIVATED;
-	be_control_look->DrawButtonFrame(this, rect, updateRect, base,
-		ViewColor(), flags);
-	be_control_look->DrawButtonBackground(this, rect, updateRect, base,
-		flags);
+	BRect r = Bounds();
+	bool pressed = Value() == B_CONTROL_ON;
+	bool enabled = IsEnabled();
+	// Whole pixels: the bevel and symbol grow in steps with the font.
+	int32 k = (int32)fmaxf(1, floorf((r.Width() + 1) / kGrid));
 
-	// The symbol, a little over half the button's size, as in the original
-	float size = floorf(Bounds().Height() * 0.55f);
-	if (size < 7)
-		size = 7;
-	BPoint c(floorf((Bounds().left + Bounds().right) / 2) + 0.5f,
-		floorf((Bounds().top + Bounds().bottom) / 2) + 0.5f);
-	if ((flags & BControlLook::B_ACTIVATED) != 0)
-		c += BPoint(1, 1);
-	float h = size / 2;
-	SetHighColor(Ink(IsEnabled()));
-	SetDrawingMode(B_OP_OVER);
-	float bar = roundf(size / 5);
-	if (bar < 2)
-		bar = 2;
+	rgb_color panel = Parent() != NULL ? Parent()->ViewColor() : ViewColor();
+	SetDrawingMode(B_OP_COPY);
+	SetHighColor(pressed ? kShade : kFace);
+	FillRect(r);
 
+	// The outline, its corners cut to the panel
+	SetHighColor(kOutline);
+	FillRect(BRect(r.left + k, r.top, r.right - k, r.top + k - 1));
+	FillRect(BRect(r.left + k, r.bottom - k + 1, r.right - k, r.bottom));
+	FillRect(BRect(r.left, r.top + k, r.left + k - 1, r.bottom - k));
+	FillRect(BRect(r.right - k + 1, r.top + k, r.right, r.bottom - k));
+	SetHighColor(panel);
+	FillRect(BRect(r.left, r.top, r.left + k - 1, r.top + k - 1));
+	FillRect(BRect(r.right - k + 1, r.top, r.right, r.top + k - 1));
+	FillRect(BRect(r.left, r.bottom - k + 1, r.left + k - 1, r.bottom));
+	FillRect(BRect(r.right - k + 1, r.bottom - k + 1, r.right, r.bottom));
+
+	// Inside the outline: a light edge, then two pixels of highlight top
+	// and left, and two of shading bottom and right; pressed, the other
+	// way round.
+	BRect in = r.InsetByCopy(k, k);
+	rgb_color light1 = pressed ? kShadow : kFace;
+	rgb_color light2 = pressed ? kShade : kHighlight;
+	rgb_color dark1 = pressed ? kHighlight : kShadow;
+	rgb_color dark2 = pressed ? kFace : kShade;
+	SetHighColor(light1);
+	FillRect(BRect(in.left, in.top, in.right, in.top + k - 1));
+	FillRect(BRect(in.left, in.top, in.left + k - 1, in.bottom));
+	SetHighColor(dark1);
+	FillRect(BRect(in.left + k, in.bottom - k + 1, in.right, in.bottom));
+	FillRect(BRect(in.right - k + 1, in.top + k, in.right, in.bottom));
+	SetHighColor(light2);
+	FillRect(BRect(in.left + k, in.top + k, in.right - k, in.top + 3 * k - 1));
+	FillRect(BRect(in.left + k, in.top + k, in.left + 3 * k - 1,
+		in.bottom - k));
+	SetHighColor(dark2);
+	FillRect(BRect(in.left + 3 * k, in.bottom - 2 * k + 1, in.right - k,
+		in.bottom - k));
+	FillRect(BRect(in.right - 2 * k + 1, in.top + 2 * k, in.right - k,
+		in.bottom - k));
+
+	// The symbol, on the 23 px grid centred in the button
+	BPoint o(floorf(r.left + (r.Width() + 1 - kGrid * k) / 2),
+		floorf(r.top + (r.Height() + 1 - kGrid * k) / 2));
+	if (pressed)
+		o += BPoint(k, k);
+	SetHighColor(enabled ? kSymbol : kShadow);
 	switch (fSymbol) {
 		case kPlay:
-		{
-			BPoint t[3] = {BPoint(c.x - h * 0.7f, c.y - h),
-				BPoint(c.x + h * 0.8f, c.y), BPoint(c.x - h * 0.7f, c.y + h)};
-			FillPolygon(t, 3);
+			for (int32 row = 0; row <= 10; row++)
+				Cells(this, o, k, 6 + row, 7, 7 + BigWidth(row) - 1);
 			break;
-		}
 		case kReverse:
-		{
-			BPoint t[3] = {BPoint(c.x + h * 0.7f, c.y - h),
-				BPoint(c.x - h * 0.8f, c.y), BPoint(c.x + h * 0.7f, c.y + h)};
-			FillPolygon(t, 3);
+			for (int32 row = 0; row <= 10; row++)
+				Cells(this, o, k, 6 + row, 15 - BigWidth(row) + 1, 15);
 			break;
-		}
 		case kStop:
-			FillRect(BRect(c.x - h * 0.8f, c.y - h * 0.8f, c.x + h * 0.8f,
-				c.y + h * 0.8f));
+			for (int32 row = 7; row <= 15; row++)
+				Cells(this, o, k, row, 7, 15);
 			break;
 		case kPause:
-			FillRect(BRect(c.x - h * 0.8f, c.y - h, c.x - h * 0.8f + bar,
-				c.y + h));
-			FillRect(BRect(c.x + h * 0.8f - bar, c.y - h, c.x + h * 0.8f,
-				c.y + h));
+			for (int32 row = 6; row <= 16; row++) {
+				Cells(this, o, k, row, 7, 9);
+				Cells(this, o, k, row, 13, 15);
+			}
+			break;
+		case kPrevious:
+			for (int32 row = 0; row <= 10; row++) {
+				int32 w = 1 + 5 - abs(row - 5);
+				Cells(this, o, k, 6 + row, 4, 5);
+				Cells(this, o, k, 6 + row, 12 - w + 1, 12);
+				Cells(this, o, k, 6 + row, 18 - w + 1, 18);
+			}
 			break;
 		case kNext:
-		case kPrevious:
-		{
-			// Two triangles and a bar, mirrored for previous
-			float d = fSymbol == kNext ? 1 : -1;
-			BPoint a[3] = {BPoint(c.x - d * h, c.y - h),
-				BPoint(c.x, c.y), BPoint(c.x - d * h, c.y + h)};
-			BPoint b[3] = {BPoint(c.x, c.y - h),
-				BPoint(c.x + d * h, c.y), BPoint(c.x, c.y + h)};
-			FillPolygon(a, 3);
-			FillPolygon(b, 3);
-			float x = c.x + d * h;
-			FillRect(BRect(fminf(x, x + d * bar), c.y - h,
-				fmaxf(x, x + d * bar), c.y + h));
+			for (int32 row = 0; row <= 10; row++) {
+				int32 w = 1 + 5 - abs(row - 5);
+				Cells(this, o, k, 6 + row, 4, 4 + w - 1);
+				Cells(this, o, k, 6 + row, 10, 10 + w - 1);
+				Cells(this, o, k, 6 + row, 17, 18);
+			}
 			break;
-		}
 		case kEject:
-		{
-			BPoint t[3] = {BPoint(c.x - h, c.y + h * 0.2f),
-				BPoint(c.x, c.y - h), BPoint(c.x + h, c.y + h * 0.2f)};
-			FillPolygon(t, 3);
-			FillRect(BRect(c.x - h, c.y + h * 0.5f, c.x + h,
-				c.y + h * 0.5f + bar));
+			for (int32 row = 0; row <= 5; row++)
+				Cells(this, o, k, 6 + row, 11 - row, 11 + row);
+			for (int32 row = 13; row <= 15; row++)
+				Cells(this, o, k, row, 6, 16);
 			break;
-		}
 	}
-	SetDrawingMode(B_OP_COPY);
+
 	if (IsFocus() && Window()->IsActive()) {
 		SetHighColor(ui_color(B_KEYBOARD_NAVIGATION_COLOR));
-		StrokeRect(Bounds().InsetByCopy(3, 3));
+		StrokeRect(in.InsetByCopy(3 * k, 3 * k));
 	}
 }
 
@@ -151,7 +192,8 @@ SymbolButton::Draw(BRect updateRect)
 BSize
 SymbolButton::MinSize()
 {
-	float unit = ControlUnit();
+	// 23 x 23 at the default size, as in the original
+	float unit = ControlUnit() + 1;
 	return BSize(unit - 1, unit - 1);
 }
 
@@ -189,7 +231,7 @@ SpeedSlider::SpeedSlider(const char* name, BMessage* message)
 BRect
 SpeedSlider::_Track() const
 {
-	float thumb = roundf(ControlUnit() * 0.45f);
+	float thumb = roundf(ControlUnit() * 0.6f);
 	BRect bounds = Bounds();
 	return BRect(bounds.left + thumb / 2 + 2, bounds.top,
 		bounds.right - thumb / 2 - 2, bounds.bottom);
@@ -242,7 +284,7 @@ SpeedSlider::Draw(BRect updateRect)
 	FillRect(bounds);
 
 	bool enabled = IsEnabled();
-	rgb_color ink = Ink(enabled);
+	rgb_color ink = enabled ? kSymbol : kShadow;
 	float mid = floorf((bounds.top + bounds.bottom) / 2);
 	BRect track = _Track();
 
@@ -255,16 +297,31 @@ SpeedSlider::Draw(BRect updateRect)
 		StrokeLine(BPoint(x, mid - tick), BPoint(x, mid + tick));
 	}
 
-	// The thumb: a small raised block
-	float w = roundf(ControlUnit() * 0.45f);
+	// The thumb: a small bevelled block in SoundPlay's greys, white top
+	// and left, dark below, with two grooves to grip.
+	float w = roundf(ControlUnit() * 0.6f);
 	float x = _XFor(Value());
 	BRect thumb(x - floorf(w / 2), bounds.top + 1, x - floorf(w / 2) + w - 1,
 		bounds.bottom - 1);
-	uint32 flags = be_control_look->Flags(this);
-	be_control_look->DrawButtonFrame(this, thumb, updateRect, Base(), panel,
-		flags);
-	be_control_look->DrawButtonBackground(this, thumb, updateRect, Base(),
-		flags);
+	SetHighColor(kFace);
+	FillRect(thumb);
+	SetHighColor(kHighlight);
+	StrokeLine(thumb.LeftTop(), thumb.RightTop());
+	StrokeLine(thumb.LeftTop(), thumb.LeftBottom());
+	SetHighColor(kDarkEdge);
+	StrokeLine(thumb.LeftBottom(), thumb.RightBottom());
+	StrokeLine(thumb.RightTop(), thumb.RightBottom());
+	SetHighColor(kShadow);
+	StrokeLine(thumb.LeftBottom() + BPoint(1, -1),
+		thumb.RightBottom() + BPoint(-1, -1));
+	for (int32 i = 1; i <= 2; i++) {
+		float gx = roundf(thumb.left + thumb.Width() * i / 3);
+		SetHighColor(enabled ? kGroove : kShadow);
+		StrokeLine(BPoint(gx, thumb.top + 2), BPoint(gx, thumb.bottom - 2));
+		SetHighColor(kHighlight);
+		StrokeLine(BPoint(gx + 1, thumb.top + 2),
+			BPoint(gx + 1, thumb.bottom - 2));
+	}
 	if (IsFocus() && Window()->IsActive()) {
 		SetHighColor(ui_color(B_KEYBOARD_NAVIGATION_COLOR));
 		StrokeLine(BPoint(thumb.left, bounds.bottom),
@@ -477,24 +534,26 @@ VolumeKnob::Draw(BRect updateRect)
 	float r = size / 2;
 	SetFlags(Flags() | B_SUBPIXEL_PRECISE);
 
-	// A domed knob, lit from the top left
-	rgb_color base = Base();
-	BGradientRadialFocus dome(BPoint(c.x - r * 0.35f, c.y - r * 0.4f),
-		r * 1.5f, BPoint(c.x - r * 0.35f, c.y - r * 0.4f));
-	dome.AddColor(tint_color(base, B_LIGHTEN_MAX_TINT), 0);
-	dome.AddColor(base, 140);
-	dome.AddColor(tint_color(base, B_DARKEN_1_TINT), 255);
-	FillEllipse(c, r, r, dome);
-	SetHighColor(tint_color(ViewColor(), B_DARKEN_3_TINT));
-	StrokeEllipse(c, r, r);
+	// SoundPlay's flat knob: a dark rim, a bevel ring white at the top
+	// left and grey at the bottom right, a light face and a red dot.
+	SetHighColor(kKnobRim);
+	FillEllipse(c, r, r);
+	BGradientLinear bevel(BPoint(c.x - r, c.y - r), BPoint(c.x + r, c.y + r));
+	bevel.AddColor(kHighlight, 0);
+	bevel.AddColor(kKnobFace, 110);
+	bevel.AddColor(kKnobLow, 255);
+	FillEllipse(c, r - 1, r - 1, bevel);
+	SetHighColor(kKnobFace);
+	FillEllipse(c, r - 3, r - 3);
 
 	// The dot: from -135 degrees (silent) to 135 (full)
 	float angle = (-135.0f + 270.0f * Value() / 100.0f) * M_PI / 180.0f;
-	BPoint dot(c.x + sinf(angle) * r * 0.62f, c.y - cosf(angle) * r * 0.62f);
-	float dotSize = fmaxf(1.2f, r * 0.14f);
-	SetHighColor(IsEnabled() ? (rgb_color){220, 30, 30, 255}
-		: tint_color(base, B_DARKEN_2_TINT));
-	FillEllipse(dot, dotSize, dotSize);
+	BPoint dot(c.x + sinf(angle) * r * 0.6f, c.y - cosf(angle) * r * 0.6f);
+	float dotSize = fmaxf(2, roundf(r * 0.2f));
+	SetHighColor(IsEnabled() ? kKnobDot : kShadow);
+	FillRect(BRect(floorf(dot.x - dotSize / 2), floorf(dot.y - dotSize / 2),
+		floorf(dot.x - dotSize / 2) + dotSize - 1,
+		floorf(dot.y - dotSize / 2) + dotSize - 1));
 
 	if (IsFocus() && Window()->IsActive()) {
 		SetHighColor(ui_color(B_KEYBOARD_NAVIGATION_COLOR));
