@@ -14,8 +14,9 @@ namespace vu {
 static const double kStepTo99 = 6.6384;
 
 
-Ballistics::Ballistics(double sampleRate)
+Ballistics::Ballistics(double sampleRate, Response response)
 	:
+	fResponse(response),
 	fStage1(0.0),
 	fStage2(0.0)
 {
@@ -27,8 +28,39 @@ void
 Ballistics::SetSampleRate(double sampleRate)
 {
 	fSampleRate = sampleRate > 0 ? sampleRate : 44100.0;
-	double tau = kRiseTime / kStepTo99;
-	fCoefficient = 1.0 - std::exp(-1.0 / (tau * fSampleRate));
+	_Update();
+}
+
+
+void
+Ballistics::SetResponse(Response response)
+{
+	fResponse = response;
+	_Update();
+}
+
+
+static double
+Coefficient(double timeConstant, double sampleRate)
+{
+	return 1.0 - std::exp(-1.0 / (timeConstant * sampleRate));
+}
+
+
+void
+Ballistics::_Update()
+{
+	if (fResponse == kLively) {
+		fScale = kLivelySensitivity;
+		fAttack = Coefficient(kLivelyAttack, fSampleRate);
+		fRelease = Coefficient(kLivelyRelease, fSampleRate);
+		fNeedle = Coefficient(kLivelyInertia, fSampleRate);
+	} else {
+		// Two identical stages, rising and falling alike
+		fScale = kAverageToPeak * kSensitivity;
+		fAttack = fRelease = fNeedle
+			= Coefficient(kRiseTime / kStepTo99, fSampleRate);
+	}
 }
 
 
@@ -45,15 +77,24 @@ Ballistics::Advance(double seconds)
 {
 	if (seconds <= 0)
 		return;
-	// With zero input, after n samples (d = 1 - coefficient, and stage 2
-	// is fed the already updated stage 1):
-	//   stage1 = d^n stage1
-	//   stage2 = d^n (stage2 + n (1 - d) stage1)
+	// With zero input, after n samples, where stage 1 falls by
+	// dx = 1 - release a sample and the needle follows the already updated
+	// stage 1 with c = needle (dy = 1 - c):
+	//   stage1 = dx^n stage1
+	//   stage2 = dy^n stage2 + c stage1 dx (dx^n - dy^n) / (dx - dy)
+	// which is dy^n (stage2 + n c stage1) when dx = dy (the VU's stages).
 	double n = seconds * fSampleRate;
-	double d = 1.0 - fCoefficient;
-	double dn = std::pow(d, n);
-	fStage2 = dn * (fStage2 + n * fCoefficient * fStage1);
-	fStage1 = dn * fStage1;
+	double dx = 1.0 - fRelease;
+	double dy = 1.0 - fNeedle;
+	double dxn = std::pow(dx, n);
+	double dyn = std::pow(dy, n);
+	double follow;
+	if (std::fabs(dx - dy) < 1e-12)
+		follow = n * fNeedle * dyn * fStage1;
+	else
+		follow = fNeedle * fStage1 * dx * (dxn - dyn) / (dx - dy);
+	fStage2 = dyn * fStage2 + follow;
+	fStage1 = dxn * fStage1;
 }
 
 
@@ -73,6 +114,14 @@ StereoMeter::SetSampleRate(double sampleRate)
 {
 	fLeft.SetSampleRate(sampleRate);
 	fRight.SetSampleRate(sampleRate);
+}
+
+
+void
+StereoMeter::SetResponse(Ballistics::Response response)
+{
+	fLeft.SetResponse(response);
+	fRight.SetResponse(response);
 }
 
 

@@ -58,6 +58,9 @@ public:
 			double				Position() const;	// seconds
 			void				Seek(double seconds);
 
+			// Lively (peak-following) or classic VU needles
+			void				SetLivelyMeter(bool lively);
+
 			// The needles' current deflection. While nothing is being
 			// played the needles fall back to rest in real time.
 			void				Levels(float& left, float& right);

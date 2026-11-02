@@ -37,6 +37,7 @@ public:
 			void				SetPosition(double position, double duration);
 			void				SetVolume(float volume);
 			void				SetRepeat(bool repeat);
+			void				SetLively(bool lively);
 			void				SetLevels(float left, float right);
 			void				SetWindowMeter(bool show);
 			bool				ShowsWindowMeter() const;
@@ -60,6 +61,7 @@ private:
 			BMenuItem*			fRepeatItem;
 			BMenuItem*			fDeskbarItem;
 			BMenuItem*			fWindowMeterItem;
+			BMenuItem*			fLivelyItem;
 			BView*				fMeterRow;
 			VUView*				fMeter;
 			bool				fShowRemaining;

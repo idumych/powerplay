@@ -155,6 +155,7 @@ private:
 			float				fVolume;	// the knob, 0..1
 			bool				fRepeat;
 			bool				fWindowMeter;
+			bool				fLively;
 			bool				fPlaylistShown;
 			double				fResumePosition;
 };
@@ -179,6 +180,7 @@ PowerPlayApp::PowerPlayApp()
 #else
 	fWindowMeter(false),
 #endif
+	fLively(true),
 	fPlaylistShown(false),
 	fResumePosition(0)
 {
@@ -187,7 +189,9 @@ PowerPlayApp::PowerPlayApp()
 	fWindow->SetVolume(fVolume);
 	fWindow->SetRepeat(fRepeat);
 	fWindow->SetWindowMeter(fWindowMeter);
+	fWindow->SetLively(fLively);
 	fPlayer.SetVolume(fVolume * fVolume);
+	fPlayer.SetLivelyMeter(fLively);
 }
 
 
@@ -464,6 +468,15 @@ PowerPlayApp::MessageReceived(BMessage* message)
 
 		case kMsgToggleDeskbar:
 			_ToggleDeskbar();
+			break;
+
+		case kMsgToggleLively:
+			fLively = !fLively;
+			fPlayer.SetLivelyMeter(fLively);
+			if (fWindow->Lock()) {
+				fWindow->SetLively(fLively);
+				fWindow->Unlock();
+			}
 			break;
 
 		case kMsgToggleWindowMeter:
@@ -871,6 +884,7 @@ PowerPlayApp::_LoadSettings()
 	fVolume = settings.GetFloat("volume", fVolume);
 	fRepeat = settings.GetBool("repeat", fRepeat);
 	fWindowMeter = settings.GetBool("window meter", fWindowMeter);
+	fLively = settings.GetBool("lively needles", fLively);
 	fPlaylistShown = settings.GetBool("playlist shown", false);
 
 	const char* entry;
@@ -894,6 +908,7 @@ PowerPlayApp::_SaveSettings()
 	settings.AddFloat("volume", fVolume);
 	settings.AddBool("repeat", fRepeat);
 	settings.AddBool("window meter", fWindowMeter);
+	settings.AddBool("lively needles", fLively);
 	settings.AddBool("playlist shown", fPlaylistShown);
 	for (int32 i = 0; i < fPlaylist.CountItems(); i++)
 		settings.AddString("playlist", fPlaylist.PathAt(i).c_str());

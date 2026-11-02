@@ -351,6 +351,15 @@ Player::Seek(double seconds)
 
 
 void
+Player::SetLivelyMeter(bool lively)
+{
+	BAutolock _(fLock);
+	fMeter.SetResponse(lively ? vu::Ballistics::kLively
+		: vu::Ballistics::kVU);
+}
+
+
+void
 Player::Levels(float& left, float& right)
 {
 	BAutolock _(fLock);

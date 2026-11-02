@@ -81,6 +81,9 @@ PlayerWindow::PlayerWindow(BRect frame)
 	fWindowMeterItem = new BMenuItem("Show meter in window",
 		Command(kMsgToggleWindowMeter));
 	menu->AddItem(fWindowMeterItem);
+	menu->AddSeparatorItem();
+	fLivelyItem = new BMenuItem("Lively needles", Command(kMsgToggleLively));
+	menu->AddItem(fLivelyItem);
 	menu->SetTargetForItems(be_app);
 	menuBar->AddItem(menu);
 
@@ -362,6 +365,13 @@ void
 PlayerWindow::SetRepeat(bool repeat)
 {
 	fRepeatItem->SetMarked(repeat);
+}
+
+
+void
+PlayerWindow::SetLively(bool lively)
+{
+	fLivelyItem->SetMarked(lively);
 }
 
 

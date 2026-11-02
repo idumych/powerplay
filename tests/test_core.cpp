@@ -157,6 +157,86 @@ TestAdvance()
 }
 
 
+// The lively needle: reads a -12 dBFS sine at 0 VU, is quick up and back,
+// and kicks on a short beat where a VU needle barely stirs.
+static void
+TestLively()
+{
+	const double frequencies[] = {1000, 100};
+	for (double frequency : frequencies) {
+		vu::Ballistics meter(kRate, vu::Ballistics::kLively);
+		double amplitude = std::pow(10.0, -12 / 20.0);
+		for (int i = 0; i < int(kRate); i++) {
+			meter.Process(float(amplitude
+				* std::sin(2 * M_PI * frequency * i / kRate)));
+		}
+		CHECK(std::fabs(vu::DeflectionToVU(meter.Deflection())) < 0.5,
+			"lively: a -12 dBFS sine at %g Hz reads %+.2f VU", frequency,
+			vu::DeflectionToVU(meter.Deflection()));
+	}
+
+	// Up and back
+	vu::Ballistics meter(kRate, vu::Ballistics::kLively);
+	std::vector<float> tone = Tone(-12, 0.5);
+	double target = vu::VUToDeflection(0);
+	double up = -1;
+	for (size_t i = 0; i < tone.size() / 2; i++) {
+		meter.Process(tone[i * 2]);
+		if (up < 0 && meter.Deflection() >= 0.9 * target)
+			up = i / kRate;
+	}
+	CHECK(up > 0 && up < 0.060, "lively: 90%% in %.3f s", up);
+	double start = meter.Deflection(), down = -1;
+	for (int i = 0; i < int(kRate); i++) {
+		meter.Process(0.0f);
+		if (down < 0 && meter.Deflection() <= 0.1 * start)
+			down = i / kRate;
+	}
+	CHECK(down > 0.2 && down < 0.45, "lively: back to 10%% in %.3f s", down);
+
+	// A 20 ms beat
+	double kick[2];
+	const vu::Ballistics::Response responses[] = {vu::Ballistics::kVU,
+		vu::Ballistics::kLively};
+	for (int r = 0; r < 2; r++) {
+		vu::Ballistics beat(kRate, responses[r]);
+		std::vector<float> burst = Tone(-12, 0.020);
+		double peak = 0;
+		for (size_t i = 0; i < burst.size() / 2; i++) {
+			beat.Process(burst[i * 2]);
+			peak = std::max(peak, beat.Deflection());
+		}
+		for (int i = 0; i < int(kRate * 0.2); i++) {
+			beat.Process(0.0f);
+			peak = std::max(peak, beat.Deflection());
+		}
+		kick[r] = peak / target;
+	}
+	CHECK(kick[1] > 0.6 && kick[0] < 0.3,
+		"a 20 ms beat: VU to %.0f%%, lively to %.0f%% of its full reading",
+		kick[0] * 100, kick[1] * 100);
+
+	// Advance() is exact here too.
+	const double times[] = {0.002, 0.03, 0.2};
+	for (double seconds : times) {
+		vu::Ballistics a(kRate, vu::Ballistics::kLively);
+		vu::Ballistics b(kRate, vu::Ballistics::kLively);
+		std::vector<float> loud = Tone(-6, 0.1);
+		for (size_t i = 0; i < loud.size() / 2; i++) {
+			a.Process(loud[i * 2]);
+			b.Process(loud[i * 2]);
+		}
+		int n = int(std::lround(seconds * kRate));
+		for (int i = 0; i < n; i++)
+			a.Process(0.0f);
+		b.Advance(n / kRate);
+		CHECK(std::fabs(a.Deflection() - b.Deflection()) < 1e-9,
+			"lively, after %g s: processed %.9f, advanced %.9f", seconds,
+			a.Deflection(), b.Deflection());
+	}
+}
+
+
 // The needles sit where the original's do at rest, and swing symmetrically.
 static void
 TestNeedles()
@@ -257,6 +337,7 @@ main()
 	TestRipple();
 	TestChannels();
 	TestAdvance();
+	TestLively();
 	TestNeedles();
 	TestRender();
 	if (sFailures == 0)

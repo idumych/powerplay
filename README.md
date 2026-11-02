@@ -11,7 +11,7 @@ measured from screenshots.
 
 | Part | State |
 |---|---|
-| VU ballistics (300 ms; 0 VU = -18 dBFS RMS, EBU R68) | done, host tests; checked against a real song |
+| Needles: lively (3 ms up, 120 ms back; 0 VU = a -12 dBFS sine) by default, or classic VU (300 ms; 0 VU = -18 dBFS RMS, EBU R68) | done, host tests; checked against a real song |
 | Meter face drawn pixel by pixel, matched to the original | done, host tests; checked on Haiku R1/beta6 |
 | Deskbar meter with a play-controls menu | runs on Haiku R1/beta6 |
 | Playing a file (BMediaFile + BSoundPlayer) | WAV played on Haiku R1/beta6 in QEMU (emulated HDA, output captured): full length, no dropouts, level unchanged |

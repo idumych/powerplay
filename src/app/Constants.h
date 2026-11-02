@@ -53,6 +53,7 @@ enum {
 
 	kMsgToggleDeskbar	= 'TDsk',
 	kMsgToggleWindowMeter = 'TWMt',
+	kMsgToggleLively	= 'TLiv',
 	kMsgAbout			= 'Abut'
 };
 

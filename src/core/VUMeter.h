@@ -30,18 +30,35 @@ public:
 	// 12 dB: from "a sine reads its peak" to 0 VU at -18 dBFS RMS
 	static constexpr double kSensitivity = 3.9810717055;
 
-	explicit Ballistics(double sampleRate = 44100.0);
+	// How the needle moves:
+	//   kVU		standard VU ballistics, as above.
+	//   kLively	follows peaks: up in 3 ms, back in 120 ms, through 15 ms
+	//				of needle inertia, so it kicks on every beat. It reads
+	//				peaks, not averages, so its reference is lower: a sine
+	//				reads its peak x kLivelySensitivity, 0 VU being a
+	//				-12 dBFS sine; a loud master swings around 0 VU.
+	enum Response { kVU, kLively };
+	static constexpr double kLivelySensitivity = 2.8183829313;	// 9 dB
+	static constexpr double kLivelyAttack = 0.003;
+	static constexpr double kLivelyRelease = 0.120;
+	static constexpr double kLivelyInertia = 0.015;
+
+	explicit Ballistics(double sampleRate = 44100.0,
+		Response response = kVU);
 
 	void SetSampleRate(double sampleRate);
 	double SampleRate() const { return fSampleRate; }
+	void SetResponse(Response response);
+	Response GetResponse() const { return fResponse; }
 	void Reset() { fStage1 = fStage2 = 0.0; }
 
 	// One sample, 1.0 = full scale.
 	void Process(float sample)
 	{
-		double rectified = std::fabs(sample) * (kAverageToPeak * kSensitivity);
-		fStage1 += fCoefficient * (rectified - fStage1);
-		fStage2 += fCoefficient * (fStage1 - fStage2);
+		double rectified = std::fabs(sample) * fScale;
+		fStage1 += (rectified > fStage1 ? fAttack : fRelease)
+			* (rectified - fStage1);
+		fStage2 += fNeedle * (fStage1 - fStage2);
 	}
 
 	// Every stride'th sample of an interleaved buffer.
@@ -54,13 +71,19 @@ public:
 	double Deflection() const { return fStage2; }
 
 private:
+	void _Update();
+
 	// The mean of |sin| is 2/pi of the peak.
 	static constexpr double kAverageToPeak = M_PI / 2.0;
 
 	double fSampleRate;
-	double fCoefficient;
-	double fStage1;
-	double fStage2;
+	Response fResponse;
+	double fScale;		// input to deflection
+	double fAttack;		// coefficients per sample
+	double fRelease;
+	double fNeedle;
+	double fStage1;		// the rectified signal, smoothed
+	double fStage2;		// the needle
 };
 
 
@@ -70,6 +93,7 @@ public:
 	explicit StereoMeter(double sampleRate = 44100.0);
 
 	void SetSampleRate(double sampleRate);
+	void SetResponse(Ballistics::Response response);
 	void Reset();
 	// A mono stream drives both needles.
 	void ProcessInterleaved(const float* samples, size_t frames,
