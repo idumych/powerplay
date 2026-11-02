@@ -27,7 +27,11 @@ The same on Linux, with the playlist.
 
 The Library window (Skins ▸ Library window): the songs PowerPlay knows, with
 their titles, artists and albums read from their tags, a search field, and
-the playlist as a second source.
+the playlist as a second source. It's made of Haiku's own controls, so it
+takes on the system's look, here with the
+[Gonx](https://github.com/idumych/gonx) decorator and control look:
+
+![The Library window with the Gonx look](docs/screenshots/haiku-library-gonx.png)
 
 ### Winamp skins
 
