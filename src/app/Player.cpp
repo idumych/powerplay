@@ -550,8 +550,15 @@ Player::_DecodeChunk(int64 chunk, float* into)
 
 	int64 written = 0;
 	bool more = true;
+	// Where the track says it ends: reading past it only gets an error,
+	// which the Media Kit also prints
+	const int64 length = fCache->Length();
 	while (written < kChunkFrames) {
 		if (fReadFrames == 0) {
+			if (length > 0 && fStreamFrame >= length) {
+				more = false;
+				break;
+			}
 			int64 frames = fReadCapacity;
 			media_header header;
 			if (fTrack->ReadFrames(fReadBuffer, &frames, &header) != B_OK
