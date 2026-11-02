@@ -9,6 +9,7 @@
 
 #include <Window.h>
 
+class BMenu;
 class BMenuItem;
 class BStringView;
 class PositionBar;
@@ -62,6 +63,7 @@ private:
 			BMenuItem*			fDeskbarItem;
 			BMenuItem*			fWindowMeterItem;
 			BMenuItem*			fLivelyItem;
+			BMenu*				fSkinsMenu;
 			BView*				fMeterRow;
 			VUView*				fMeter;
 			bool				fShowRemaining;

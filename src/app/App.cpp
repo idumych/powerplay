@@ -21,6 +21,7 @@
 #include <NodeInfo.h>
 #include <Path.h>
 #include <PropertyInfo.h>
+#include <Roster.h>
 #include <Screen.h>
 
 #include <algorithm>
@@ -37,6 +38,9 @@
 #include "PlayerWindow.h"
 #include "Playlist.h"
 #include "PlaylistWindow.h"
+#include "SkinWindow.h"
+#include "Skins.h"
+#include "WinampSkin.h"
 
 static const char* kSettingsName = "PowerPlay_settings";
 
@@ -133,7 +137,11 @@ private:
 			void				_PlaylistChanged();
 			void				_ShowPlaylist();
 			void				_UpdateWindow();
+			void				_UpdateSkin(float left, float right);
 			void				_PublishLevels();
+			bool				_ApplySkin(const char* path);
+			bool				_SkinShown();
+			int32				_RandomOther();
 			void				_ToggleDeskbar();
 			void				_ShowFilePanel(bool add);
 			void				_LoadSettings();
@@ -142,6 +150,7 @@ private:
 			Player				fPlayer;
 			audio::Playlist		fPlaylist;
 			PlayerWindow*		fWindow;
+			SkinWindow*			fSkinWindow;
 			PlaylistWindow*		fPlaylistWindow;
 			BFilePanel*			fOpenPanel;
 			BFilePanel*			fAddPanel;
@@ -155,6 +164,10 @@ private:
 			float				fVolume;	// the knob, 0..1
 			bool				fRepeat;
 			bool				fWindowMeter;
+			bool				fShuffle;
+			float				fBalance;
+			BString				fSkinPath;
+			BPoint				fSkinWhere;
 			bool				fLively;
 			bool				fPlaylistShown;
 			double				fResumePosition;
@@ -165,6 +178,7 @@ PowerPlayApp::PowerPlayApp()
 	:
 	BApplication(kAppSignature),
 	fWindow(NULL),
+	fSkinWindow(NULL),
 	fPlaylistWindow(NULL),
 	fOpenPanel(NULL),
 	fAddPanel(NULL),
@@ -180,6 +194,9 @@ PowerPlayApp::PowerPlayApp()
 #else
 	fWindowMeter(false),
 #endif
+	fShuffle(false),
+	fBalance(0),
+	fSkinWhere(100, 100),
 	fLively(true),
 	fPlaylistShown(false),
 	fResumePosition(0)
@@ -192,6 +209,8 @@ PowerPlayApp::PowerPlayApp()
 	fWindow->SetLively(fLively);
 	fPlayer.SetVolume(fVolume * fVolume);
 	fPlayer.SetLivelyMeter(fLively);
+	fPlayer.SetBalance(fBalance);
+	fSkinWindow = new SkinWindow(fSkinWhere);
 }
 
 
@@ -215,8 +234,11 @@ PowerPlayApp::ReadyToRun()
 	if (!fPlayer.HasFile() && fPlaylist.Current() != audio::Playlist::kNone
 		&& _Load(fPlaylist.Current(), false, false))
 		fPlayer.Seek(fResumePosition);
+	// The skin from last time, or PowerPlay's own look
+	BString skinPath = fSkinPath;
+	if (skinPath.Length() == 0 || !_ApplySkin(skinPath.String()))
+		fWindow->Show();
 	_UpdateWindow();
-	fWindow->Show();
 	if (fPlaylistShown)
 		_ShowPlaylist();
 }
@@ -241,9 +263,21 @@ PowerPlayApp::ArgvReceived(int32 argc, char** argv)
 void
 PowerPlayApp::RefsReceived(BMessage* message)
 {
-	// Opened, dropped on the controller, or from Tracker: these become the
-	// playlist.
-	_AddToPlaylist(message, true);
+	// A skin is installed and used; the rest become the playlist (opened,
+	// dropped on the window, or from Tracker).
+	BMessage music(*message);
+	music.RemoveName("refs");
+	entry_ref ref;
+	for (int32 i = 0; message->FindRef("refs", i, &ref) == B_OK; i++) {
+		if (is_skin_file(ref)) {
+			BPath installed;
+			if (install_skin(ref, installed) == B_OK)
+				_ApplySkin(installed.Path());
+		} else
+			music.AddRef("refs", &ref);
+	}
+	if (music.HasRef("refs"))
+		_AddToPlaylist(&music, true);
 }
 
 
@@ -329,6 +363,57 @@ PowerPlayApp::MessageReceived(BMessage* message)
 			_UpdateWindow();
 			break;
 
+		case kMsgPlay:
+			// As Winamp's Play: forwards, and from the start when playing
+			if (fPlayer.HasFile() && fPlayer.IsPlaying()
+				&& fPlayer.Speed() > 0)
+				fPlayer.Seek(0);
+			else
+				_PlayPause(false);
+			_UpdateWindow();
+			break;
+
+		case kMsgPause:
+			if (fPlayer.IsPlaying())
+				fPlayer.Pause();
+			else if (fPlayer.HasFile())
+				fPlayer.Play();
+			_UpdateWindow();
+			break;
+
+		case kMsgSetBalance:
+		{
+			float balance;
+			if (message->FindFloat("balance", &balance) == B_OK) {
+				fBalance = balance < -1 ? -1 : balance > 1 ? 1 : balance;
+				fPlayer.SetBalance(fBalance);
+			}
+			break;
+		}
+
+		case kMsgToggleShuffle:
+			fShuffle = !fShuffle;
+			_UpdateWindow();
+			break;
+
+		case kMsgSetSkin:
+		{
+			const char* path;
+			if (message->FindString("path", &path) == B_OK)
+				_ApplySkin(path);
+			break;
+		}
+
+		case kMsgOpenSkinsFolder:
+		{
+			BPath folder;
+			entry_ref ref;
+			if (skins_folder(folder, true) == B_OK
+				&& get_ref_for_path(folder.Path(), &ref) == B_OK)
+				be_roster->Launch(&ref);
+			break;
+		}
+
 		case kMsgNext:
 			_Advance(false, fRepeat);
 			break;
@@ -348,7 +433,8 @@ PowerPlayApp::MessageReceived(BMessage* message)
 			// On to the next file; playing backwards, to the previous one,
 			// from its end, so a whole playlist plays backwards.
 			bool backwards = message->GetBool("backwards", false);
-			int32 next = backwards ? fPlaylist.Previous(fRepeat)
+			int32 next = fShuffle && !backwards ? _RandomOther()
+				: backwards ? fPlaylist.Previous(fRepeat)
 				: fPlaylist.Next(fRepeat);
 			if (next != audio::Playlist::kNone)
 				_Load(next, backwards, true);
@@ -384,6 +470,10 @@ PowerPlayApp::MessageReceived(BMessage* message)
 				fVolume = volume < 0 ? 0 : volume > 1 ? 1 : volume;
 				// The knob turns evenly in loudness, not in gain.
 				fPlayer.SetVolume(fVolume * fVolume);
+				if (fWindow->Lock()) {
+					fWindow->SetVolume(fVolume);
+					fWindow->Unlock();
+				}
 			}
 			break;
 		}
@@ -523,6 +613,10 @@ PowerPlayApp::QuitRequested()
 		fPlaylistShown = !fPlaylistWindow->IsHidden();
 		fPlaylistWindow->Quit();
 		fPlaylistWindow = NULL;
+	}
+	if (fSkinWindow->Lock()) {
+		fSkinWhere = fSkinWindow->Frame().LeftTop();
+		fSkinWindow->Quit();
 	}
 	if (fWindow->Lock()) {
 		fWindowFrame = fWindow->Frame();
@@ -710,8 +804,8 @@ PowerPlayApp::_PlayPause(bool backwards)
 void
 PowerPlayApp::_Advance(bool backwards, bool wrap)
 {
-	int32 index = backwards ? fPlaylist.Previous(wrap)
-		: fPlaylist.Next(wrap);
+	int32 index = fShuffle && !backwards ? _RandomOther()
+		: backwards ? fPlaylist.Previous(wrap) : fPlaylist.Next(wrap);
 	if (index == audio::Playlist::kNone)
 		return;
 	bool playing = fPlayer.IsPlaying();
@@ -779,9 +873,132 @@ PowerPlayApp::_ShowPlaylist()
 //	#pragma mark - Window and meters
 
 
+int32
+PowerPlayApp::_RandomOther()
+{
+	// Shuffle: any other file
+	int32 count = fPlaylist.CountItems();
+	if (count < 2)
+		return count == 1 && fRepeat ? 0 : audio::Playlist::kNone;
+	int32 index = (int32)(((uint64)system_time() * 2654435761u) >> 8) % count;
+	if (index == fPlaylist.Current())
+		index = (index + 1) % count;
+	return index;
+}
+
+
+bool
+PowerPlayApp::_SkinShown()
+{
+	if (!fSkinWindow->Lock())
+		return false;
+	bool shown = !fSkinWindow->IsHidden();
+	fSkinWindow->Unlock();
+	return shown;
+}
+
+
+// A skin's path, or "" for PowerPlay's own look.
+bool
+PowerPlayApp::_ApplySkin(const char* path)
+{
+	if (path == NULL || path[0] == '\0') {
+		fSkinPath = "";
+		if (fSkinWindow->Lock()) {
+			if (!fSkinWindow->IsHidden())
+				fSkinWindow->Hide();
+			fSkinWindow->Unlock();
+		}
+		if (fWindow->Lock()) {
+			if (fWindow->IsHidden())
+				fWindow->Show();
+			fWindow->Unlock();
+		}
+		return true;
+	}
+
+	skin::WinampSkin* newSkin = new skin::WinampSkin;
+	if (!newSkin->Load(path)) {
+		delete newSkin;
+		BString text;
+		text.SetToFormat("\"%s\" isn't a Winamp skin PowerPlay can use.",
+			BPath(path).Leaf());
+		BAlert* alert = new BAlert("Skin", text.String(), "OK", NULL, NULL,
+			B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+		alert->Go(NULL);
+		return false;
+	}
+	fSkinPath = path;
+	if (fSkinWindow->Lock()) {
+		fSkinWindow->SetSkin(newSkin, path);
+		if (fSkinWindow->IsHidden())
+			fSkinWindow->Show();
+		fSkinWindow->Activate();
+		fSkinWindow->Unlock();
+	}
+	if (fWindow->Lock()) {
+		if (!fWindow->IsHidden())
+			fWindow->Hide();
+		fWindow->Unlock();
+	}
+	_UpdateWindow();
+	return true;
+}
+
+
+void
+PowerPlayApp::_UpdateSkin(float left, float right)
+{
+	skin::State state;
+	bool playing = fPlayer.IsPlaying();
+	double position = fPlayer.Position();
+	double duration = fPlayer.Duration();
+	state.hasFile = fPlayer.HasFile();
+	state.playback = playing ? skin::State::kPlaying
+		: state.hasFile && position > 0 ? skin::State::kPaused
+		: skin::State::kStopped;
+	state.seconds = (int)position;
+	if (state.hasFile) {
+		// "1. Name (5:16)", as Winamp shows it
+		BString name = fPlayer.FileName();
+		int32 dot = name.FindLast('.');
+		if (dot > 0)
+			name.Truncate(dot);
+		int length = (int)duration;
+		BString title;
+		title.SetToFormat("%d. %s (%d:%02d)", fPlaylist.Current() + 1,
+			name.String(), length / 60, length % 60);
+		state.title = title.String();
+	} else
+		state.title = kAppName;
+	state.kbps = fPlayer.Bitrate();
+	state.khz = (fPlayer.SampleRate() + 500) / 1000;
+	state.channels = fPlayer.Channels() >= 2 ? 2 : fPlayer.Channels();
+	state.position = duration > 0 ? position / duration : 0;
+	state.volume = fVolume;
+	state.balance = fBalance;
+	state.shuffle = fShuffle;
+	state.repeat = fRepeat;
+	if (fPlaylistWindow != NULL && fPlaylistWindow->Lock()) {
+		state.playlist = !fPlaylistWindow->IsHidden();
+		fPlaylistWindow->Unlock();
+	}
+	state.levelLeft = left;
+	state.levelRight = right;
+	if (fSkinWindow->Lock()) {
+		if (!fSkinWindow->IsHidden())
+			fSkinWindow->SetState(state);
+		fSkinWindow->Unlock();
+	}
+}
+
+
 void
 PowerPlayApp::_UpdateWindow()
 {
+	float left, right;
+	fPlayer.Levels(left, right);
+	_UpdateSkin(left, right);
 	if (!fWindow->Lock())
 		return;
 	fWindow->SetTitle(fPlayer.FileName(), fPlayer.FormatName());
@@ -805,6 +1022,7 @@ PowerPlayApp::_PublishLevels()
 			fWindow->SetPosition(fPlayer.Position(), fPlayer.Duration());
 		fWindow->Unlock();
 	}
+	_UpdateSkin(left, right);
 
 	BMessage levels(kMsgMeterLevels);
 	levels.AddFloat("left", left);
@@ -885,6 +1103,13 @@ PowerPlayApp::_LoadSettings()
 	fRepeat = settings.GetBool("repeat", fRepeat);
 	fWindowMeter = settings.GetBool("window meter", fWindowMeter);
 	fLively = settings.GetBool("lively needles", fLively);
+	fShuffle = settings.GetBool("shuffle", fShuffle);
+	fBalance = settings.GetFloat("balance", fBalance);
+	fSkinPath = settings.GetString("skin", "");
+	BPoint where;
+	if (settings.FindPoint("skin where", &where) == B_OK
+		&& screen.Contains(where + BPoint(20, 10)))
+		fSkinWhere = where;
 	fPlaylistShown = settings.GetBool("playlist shown", false);
 
 	const char* entry;
@@ -909,6 +1134,10 @@ PowerPlayApp::_SaveSettings()
 	settings.AddBool("repeat", fRepeat);
 	settings.AddBool("window meter", fWindowMeter);
 	settings.AddBool("lively needles", fLively);
+	settings.AddBool("shuffle", fShuffle);
+	settings.AddFloat("balance", fBalance);
+	settings.AddString("skin", fSkinPath);
+	settings.AddPoint("skin where", fSkinWhere);
 	settings.AddBool("playlist shown", fPlaylistShown);
 	for (int32 i = 0; i < fPlaylist.CountItems(); i++)
 		settings.AddString("playlist", fPlaylist.PathAt(i).c_str());

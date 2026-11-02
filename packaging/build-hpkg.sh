@@ -66,6 +66,7 @@ provides		{
 }
 requires		{
 	haiku >= r1~beta6$REQ
+	lib:libz
 }
 EOF
 

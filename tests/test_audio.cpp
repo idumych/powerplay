@@ -186,6 +186,21 @@ TestRatesMonoVolume()
 		"48 kHz into 44.1 kHz: %g, expected %g", out[999 * 2], expected);
 	CHECK(out[999 * 2] == out[999 * 2 + 1], "mono feeds both channels");
 
+	// Balance turns the other side down
+	ChunkCache stereo(2, kChunk, 8);
+	stereo.SetLength(length);
+	FillAll(stereo, length);
+	PlayHead balanced;
+	balanced.SetBalance(0.5f);
+	std::vector<float> two(2 * 10);
+	balanced.Seek(1000);
+	balanced.Render(stereo, two.data(), 10);
+	CHECK(std::fabs(two[0] - 0.5f * Left(1000)) < 1e-7
+		&& std::fabs(two[1] + Left(1000)) < 1e-7, "balance right: %g %g",
+		two[0] * 1e6, two[1] * 1e6);
+	balanced.SetBalance(-3);
+	CHECK(balanced.Balance() == -1, "balance clamped");
+
 	head.SetSpeed(9);
 	CHECK(head.Speed() == PlayHead::kMaxSpeed, "speed clamped");
 	head.SetSpeed(0);

@@ -17,11 +17,22 @@ measured from screenshots.
 | Playing a file (BMediaFile + BSoundPlayer) | WAV played on Haiku R1/beta6 in QEMU (emulated HDA, output captured): full length, no dropouts, level unchanged |
 | Vector icon (HVIF, tools/make-icon.py) | done; checked in Tracker, Deskbar and About on Haiku R1/beta6 |
 | Playlist, main window like SoundPlay's | not started |
+| Winamp 2.x skins for the main window (.wsz or a folder; Skins menu) | done, host tests; the four test skins checked on Linux (X11, clicks, sliders, drag, relaunch) and drawn on Haiku R1/beta6; no playlist or equalizer skins, no region.txt shapes yet |
 | Linux (Hokku) | builds unchanged against Hokku 29097935 and opens under Xvfb (X11): window, meter, About; no Deskbar on Linux yet; sound not tried |
 
 ## Building
 
 On Haiku: `make`, then `./PowerPlay [file]`. Host tests on any system: `make test`.
+
+## Skins
+
+PowerPlay can look like a classic Winamp 2.x player. Put `.wsz` skins (or
+folders of unpacked ones) in `~/config/settings/PowerPlay/Skins`
+(`~/.config/cosmoe/PowerPlay/Skins` on Linux), or drop a `.wsz` on the
+player to copy it there, then choose it from the Skins menu. Right-click a
+skin for the menu; "PowerPlay" in the Skins menu goes back to the usual
+window. The keys are Winamp's: z previous, x play, c pause, v stop, b next.
+PowerPlay comes with no skins.
 
 ## Scripting
 

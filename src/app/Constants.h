@@ -28,6 +28,14 @@ enum {
 										// "fraction": float, 0..1
 	kMsgSetVolume		= 'Volu',	// "volume": float, 0..1
 	kMsgToggleRepeat	= 'Rept',
+	kMsgToggleShuffle	= 'Shuf',
+	kMsgPlay			= 'Play',	// forwards; restarts a playing file
+	kMsgPause			= 'Paus',	// pauses, or resumes when paused
+	kMsgSetBalance		= 'Bala',	// "balance": float, -1..1
+
+	// Skins
+	kMsgSetSkin			= 'Skin',	// "path": string, "" = PowerPlay's look
+	kMsgOpenSkinsFolder	= 'SkFo',
 	kMsgToggleTime		= 'Time',	// elapsed / remaining
 
 	// The playlist. The app owns it and sends the editor a copy

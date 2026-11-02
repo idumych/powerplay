@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "Constants.h"
+#include "Skins.h"
 #include "Controls.h"
 #include "PlayHead.h"
 #include "VUView.h"
@@ -86,6 +87,10 @@ PlayerWindow::PlayerWindow(BRect frame)
 	menu->AddItem(fLivelyItem);
 	menu->SetTargetForItems(be_app);
 	menuBar->AddItem(menu);
+
+	// This window only shows while no skin is used
+	fSkinsMenu = new_skins_menu("");
+	menuBar->AddItem(fSkinsMenu);
 
 	fPreviousButton = new SymbolButton("previous", SymbolButton::kPrevious,
 		Command(kMsgPrevious));
@@ -185,6 +190,7 @@ PlayerWindow::MenusBeginning()
 {
 	fDeskbarItem->SetMarked(BDeskbar().HasItem(kDeskbarItemName));
 	fWindowMeterItem->SetMarked(ShowsWindowMeter());
+	fill_skins_menu(fSkinsMenu, "");
 }
 
 

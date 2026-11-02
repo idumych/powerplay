@@ -53,6 +53,14 @@ public:
 			// 0 to 1, as a gain.
 			void				SetVolume(float volume);
 			float				Volume() const;
+			// -1 (left) to 1 (right)
+			void				SetBalance(float balance);
+			float				Balance() const;
+
+			// What the file is, for a skin's display (0 when unknown)
+			int32				Channels() const;
+			int32				SampleRate() const;
+			int32				Bitrate() const { return fBitrate; }	// kbps
 
 			double				Duration() const;	// seconds, 0 if unknown
 			double				Position() const;	// seconds
@@ -86,6 +94,7 @@ private:
 			entry_ref			fRef;
 			BString				fName;
 			BString				fFormatName;
+			int32				fBitrate;
 
 	mutable	BLocker				fLock;
 			bool				fRunning;	// the sound player is started

@@ -241,6 +241,7 @@ PlayHead::PlayHead()
 	fStep(1.0),
 	fSpeed(1.0),
 	fVolume(1.0f),
+	fBalance(0.0f),
 	fPosition(0)
 {
 }
@@ -250,6 +251,13 @@ void
 PlayHead::SetRates(double sourceRate, double outputRate)
 {
 	fStep = sourceRate > 0 && outputRate > 0 ? sourceRate / outputRate : 1.0;
+}
+
+
+void
+PlayHead::SetBalance(float balance)
+{
+	fBalance = std::clamp(balance, -1.0f, 1.0f);
 }
 
 
@@ -271,6 +279,8 @@ PlayHead::Render(const ChunkCache& cache, float* out, size_t frames)
 	FrameReader reader(cache);
 	const int64_t length = cache.LengthLocked();	// -1 = not known yet
 	const double step = fSpeed * fStep;
+	const float leftGain = fVolume * (fBalance > 0 ? 1.0f - fBalance : 1.0f);
+	const float rightGain = fVolume * (fBalance < 0 ? 1.0f + fBalance : 1.0f);
 
 	for (size_t i = 0; i < frames; i++) {
 		if (step < 0 && fPosition < 0) {
@@ -311,8 +321,8 @@ PlayHead::Render(const ChunkCache& cache, float* out, size_t frames)
 			l3 = l2;
 			r3 = r2;
 		}
-		out[i * 2] = Cubic(l0, l1, l2, l3, t) * fVolume;
-		out[i * 2 + 1] = Cubic(r0, r1, r2, r3, t) * fVolume;
+		out[i * 2] = Cubic(l0, l1, l2, l3, t) * leftGain;
+		out[i * 2 + 1] = Cubic(r0, r1, r2, r3, t) * rightGain;
 		fPosition += step;
 	}
 	return kPlaying;

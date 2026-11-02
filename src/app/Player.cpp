@@ -31,6 +31,7 @@ Player::Player()
 	fFile(NULL),
 	fTrack(NULL),
 	fSoundPlayer(NULL),
+	fBitrate(0),
 	fLock("player"),
 	fRunning(false),
 	fPlaying(false),
@@ -138,6 +139,21 @@ Player::Open(const entry_ref& ref, bool atEnd)
 	if (file->GetFileFormatInfo(&fileFormat) == B_OK)
 		formatName = fileFormat.short_name;
 
+	// The bit rate: the encoder's, or the file's size over its length
+	int32 bitrate = 0;
+	media_format encoded;
+	if (track->EncodedFormat(&encoded) == B_OK
+		&& encoded.type == B_MEDIA_ENCODED_AUDIO
+		&& encoded.u.encoded_audio.bit_rate > 0)
+		bitrate = (int32)(encoded.u.encoded_audio.bit_rate / 1000);
+	if (bitrate <= 0 && track->CountFrames() > 0 && decoded.frame_rate > 0) {
+		BEntry entry(&ref);
+		off_t size;
+		double seconds = track->CountFrames() / decoded.frame_rate;
+		if (entry.GetSize(&size) == B_OK && seconds > 0)
+			bitrate = (int32)(size * 8 / seconds / 1000);
+	}
+
 	size_t frameSize = sizeof(float) * decoded.channel_count;
 	int64 readCapacity = 2 * (decoded.buffer_size / frameSize);
 	if (readCapacity < 8192)
@@ -158,6 +174,7 @@ Player::Open(const entry_ref& ref, bool atEnd)
 		// The leaf name (on Linux an entry_ref's name is the whole path)
 		fName = BPath(&ref).Leaf();
 		fFormatName = formatName;
+		fBitrate = bitrate;
 		fCache = cache;
 		fHead.SetRates(decoded.frame_rate, fOutputRate);
 		fHead.Seek(atEnd && length > 0 ? length - 1 : 0);
@@ -271,6 +288,38 @@ Player::IsPlaying() const
 {
 	BAutolock _(fLock);
 	return fPlaying;
+}
+
+
+void
+Player::SetBalance(float balance)
+{
+	BAutolock _(fLock);
+	fHead.SetBalance(balance);
+}
+
+
+float
+Player::Balance() const
+{
+	BAutolock _(fLock);
+	return fHead.Balance();
+}
+
+
+int32
+Player::Channels() const
+{
+	BAutolock _(fLock);
+	return fTrack != NULL ? (int32)fFormat.channel_count : 0;
+}
+
+
+int32
+Player::SampleRate() const
+{
+	BAutolock _(fLock);
+	return fTrack != NULL ? (int32)fFormat.frame_rate : 0;
 }
 
 

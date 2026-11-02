@@ -102,6 +102,10 @@ public:
 			double				Speed() const { return fSpeed; }
 			void				SetVolume(float volume) { fVolume = volume; }
 			float				Volume() const { return fVolume; }
+			// -1 (left only) to 1 (right only): the other side is turned
+			// down as it moves away from the middle.
+			void				SetBalance(float balance);
+			float				Balance() const { return fBalance; }
 
 			void				Seek(double frame) { fPosition = frame; }
 			double				Position() const { return fPosition; }
@@ -115,6 +119,7 @@ private:
 			double				fStep;		// source frames per output frame
 			double				fSpeed;
 			float				fVolume;
+			float				fBalance;
 			double				fPosition;
 };
 
