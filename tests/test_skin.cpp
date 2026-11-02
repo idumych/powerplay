@@ -388,6 +388,31 @@ TestLayout()
 	double half = skin::SliderValue(skin::kPosition, 16 + 124);
 	CHECK(half > 0.49 && half < 0.51, "position middle %.3f", half);
 
+	// Equalizer and playlist layout
+	CHECK(skin::EqHitTest(20, 22) == skin::kEqOn, "EQ on");
+	CHECK(skin::EqHitTest(266, 5) == skin::kEqClose, "EQ close");
+	CHECK(skin::EqHitTest(80, 60) == skin::kEqBand, "EQ 60 Hz band");
+	CHECK(skin::EqHitTest(80 + 18 * 9, 60) == skin::kEqBand + 9,
+		"EQ 16 kHz band");
+	CHECK(skin::EqHitTest(25, 60) == skin::kEqPreamp, "EQ preamp");
+	CHECK(skin::EqSliderGain(38) == 12 && skin::EqSliderGain(100) == -12
+		&& skin::EqSliderGain(38 + 5 + 26) == 0, "EQ slider ends and middle");
+	CHECK(skin::PlaylistHitTest(100, 50, 275, 116) == skin::kPlItems,
+		"playlist items");
+	CHECK(skin::PlaylistHitTest(20, 100, 275, 116) == skin::kPlAdd,
+		"playlist ADD");
+	CHECK(skin::PlaylistHitTest(415, 225, 425, 232) == skin::kPlResize,
+		"playlist resize corner");
+	CHECK(skin::PlaylistHitTest(420, 6, 425, 232) == skin::kPlClose,
+		"playlist close");
+	skin::PlaylistColors plColors = skin::ParsePlaylistColors(
+		"[Text]\r\nNormal=#88A038\r\nCurrent=#E0E848\r\n"
+		"NormalBG=#183018\r\nSelectedBG=#304820\r\nFont=Tahoma\r\n");
+	CHECK(plColors.normal == 0xff88a038 && plColors.current == 0xffe0e848
+		&& plColors.normalBackground == 0xff183018
+		&& plColors.selectedBackground == 0xff304820
+		&& plColors.font == "Tahoma", "pledit.txt colours");
+
 	std::vector<uint32_t> colors = skin::ParseVisColors("");
 	CHECK(colors.size() == 24 && colors[0] == 0xff000000, "default colours");
 }
@@ -404,7 +429,8 @@ TestBuiltInSkin()
 		return;
 	}
 	for (const char* name : {"main", "titlebar", "cbuttons", "numbers", "text",
-			"playpaus", "monoster", "volume", "balance", "posbar", "shufrep"})
+			"playpaus", "monoster", "volume", "balance", "posbar", "shufrep",
+			"eqmain", "pledit"})
 		CHECK(skin.HasImage(name), "the built-in skin has %s.bmp", name);
 	skin::State stopped, playing;
 	playing.playback = skin::State::kPlaying;

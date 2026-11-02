@@ -37,6 +37,11 @@ enum {
 	kMsgSetSkin			= 'Skin',	// "path": string, "" = PowerPlay's look
 	kMsgOpenSkinsFolder	= 'SkFo',
 	kMsgToggleDoubleSize	= 'Dubl',
+	kMsgSkinDoubleSize	= 'SkDb',	// "double": bool, from the skin window
+	kMsgShowEqualizer	= 'ShEq',	// shows or hides a skin's equalizer
+	// "on": bool; "band": int32 (-1 = preamp) and "gain": float (dB); or
+	// "bands": 10 floats and "preamp"
+	kMsgSetEqualizer	= 'SeEq',
 	kMsgToggleTime		= 'Time',	// elapsed / remaining
 
 	// The playlist. The app owns it and sends the editor a copy

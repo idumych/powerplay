@@ -35,7 +35,7 @@ public:
 	virtual	void				MouseUp(BPoint where);
 	virtual	void				MessageReceived(BMessage* message);
 
-			void				SetSkin(skin::WinampSkin* skin);
+			void				SetSkin(std::shared_ptr<skin::WinampSkin> skin);
 			void				SetState(const skin::State& state);
 			void				SetActive(bool active);
 			void				SetScale(int scale);
@@ -50,7 +50,7 @@ private:
 			void				_Command(Control control);
 			void				_ShowMenu(BPoint screenWhere);
 
-			std::unique_ptr<skin::WinampSkin> fSkin;
+			std::shared_ptr<skin::WinampSkin> fSkin;
 			BBitmap*			fBitmap;
 			skin::State			fState;
 			bool				fShowRemaining;
@@ -91,9 +91,9 @@ SkinView::~SkinView()
 
 
 void
-SkinView::SetSkin(skin::WinampSkin* newSkin)
+SkinView::SetSkin(std::shared_ptr<skin::WinampSkin> newSkin)
 {
-	fSkin.reset(newSkin);
+	fSkin = newSkin;
 	_Redraw();
 }
 
@@ -318,6 +318,7 @@ SkinView::_Command(Control control)
 		case skin::kShuffle:	be_app->PostMessage(kMsgToggleShuffle); break;
 		case skin::kRepeat:		be_app->PostMessage(kMsgToggleRepeat); break;
 		case skin::kPlaylist:	be_app->PostMessage(kMsgShowPlaylist); break;
+		case skin::kEqualizer:	be_app->PostMessage(kMsgShowEqualizer); break;
 		case skin::kMinimizeButton:
 			Window()->Minimize(true);
 			break;
@@ -349,6 +350,7 @@ SkinView::_ShowMenu(BPoint screenWhere)
 	menu->AddItem(new BMenuItem("Add files" B_UTF8_ELLIPSIS,
 		Command(kMsgAddFiles)));
 	menu->AddItem(new BMenuItem("Playlist", Command(kMsgShowPlaylist)));
+	menu->AddItem(new BMenuItem("Equalizer", Command(kMsgShowEqualizer)));
 	menu->AddSeparatorItem();
 
 	BMenu* playback = new BMenu("Playback");
@@ -490,7 +492,8 @@ SkinWindow::_HandleShortcut(BMessage* message)
 
 
 void
-SkinWindow::SetSkin(skin::WinampSkin* newSkin, const char* path)
+SkinWindow::SetSkin(std::shared_ptr<skin::WinampSkin> newSkin,
+	const char* path)
 {
 	fSkinPath = path;
 	if (newSkin != NULL)
@@ -517,6 +520,10 @@ SkinWindow::SetDoubleSize(bool doubleSize)
 	int scale = doubleSize ? 2 : 1;
 	ResizeTo(skin::kMainWidth * scale - 1, skin::kMainHeight * scale - 1);
 	fView->SetScale(scale);
+	// The equalizer doubles with it
+	BMessage notice(kMsgSkinDoubleSize);
+	notice.AddBool("double", doubleSize);
+	be_app->PostMessage(&notice);
 }
 
 

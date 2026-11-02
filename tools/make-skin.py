@@ -197,6 +197,12 @@ NARROW = {
     "z": "###|..#|.#.|#..|###",
     "a": ".#.|#.#|###|#.#|#.#", "i": "###|.#.|.#.|.#.|###",
     "d": "##.|#.#|#.#|#.#|##.", "v": "#.#|#.#|#.#|#.#|.#.",
+    "0": "###|#.#|#.#|#.#|###", "1": ".#.|##.|.#.|.#.|###",
+    "2": "##.|..#|.#.|#..|###", "3": "##.|..#|.#.|..#|##.",
+    "4": "#.#|#.#|###|..#|..#", "5": "###|#..|##.|..#|##.",
+    "6": ".##|#..|###|#.#|###", "7": "###|..#|.#.|.#.|.#.",
+    "8": "###|#.#|###|#.#|###", "9": "###|#.#|###|..#|##.",
+    "+": "...|.#.|###|.#.|...", "-": "...|...|###|...|...",
 }
 
 # The clutter bar's buttons: letter, top (from the bar's top at y 22) and
@@ -443,7 +449,8 @@ def title_font():
     return None
 
 
-def title_bar(active, pressed=None):
+def title_bar(active, pressed=None, label="POWERPLAY",
+              buttons=("minimize", "shade", "close")):
     c = Canvas(W, 14)
     c.img = brushed(W, 14, (92, 95, 101), (52, 54, 59), 3).resize(
         (W * S, 14 * S), Image.NEAREST).convert("RGBA")
@@ -453,7 +460,6 @@ def title_bar(active, pressed=None):
     c.fill(c.rrect_mask(W - 1, 0, W, 14, 0), (34, 35, 38))
 
     # Lettering, embossed, with a small bolt
-    label = "POWERPLAY"
     font = title_font()
     text_w = 0
     if font is not None:
@@ -498,7 +504,9 @@ def title_bar(active, pressed=None):
     c.fill(c.ellipse_mask(9.6, 6.3, 1.0), (255, 255, 255, 150))
 
     # Minimize, shade, close
-    for x, kind in ((244, "minimize"), (254, "shade"), (264, "close")):
+    places = {"minimize": 244, "shade": 254, "close": 264}
+    for kind in buttons:
+        x = places[kind]
         down = pressed == kind
         c.fill(c.rrect_mask(x, 3, x + 9, 12, 1.5), (18, 18, 20))
         c.fill(c.rrect_mask(x + 0.6, 3.6, x + 8.4, 11.4, 1),
@@ -570,7 +578,7 @@ SYMBOLS = {
 }
 
 
-def toggle_button(face, x, y, w, h, label, on, down, font=FONT):
+def toggle_button(face, x, y, w, h, label, on, down, font=FONT, led=True):
     """Shuffle, repeat, EQ, PL: a steel key with an LED."""
     c = control(face, x, y, w, h)
     c.fill(c.rrect_mask(x + 0.5, y + 0.5, x + w - 0.5, y + h - 0.5, 2),
@@ -580,6 +588,12 @@ def toggle_button(face, x, y, w, h, label, on, down, font=FONT):
     c.fill(c.rrect_mask(x + 1.2, y + 1.2, x + w - 1.2, y + h - 1.2, 1.5),
            c.vgrad(y + 1, y + h - 1, top, bottom))
     led_x, led_y = x + 4.5, y + h / 2 + (0.4 if down else 0)
+    if not led:
+        img = c.down()
+        tw = text_pixels(label, font)[1]
+        draw_text(img, label, (w - tw) // 2, (h - 5) // 2 + (1 if down else 0),
+                  (30, 31, 34), font)
+        return img
     c.fill(c.ellipse_mask(led_x, led_y, 1.9), (30, 20, 12))
     if on:
         halo = c.ellipse_mask(led_x, led_y, 2.6).filter(
@@ -698,6 +712,323 @@ def status_icons(face1):
     c.fill(halo, AMBER + (110,))
     return c.down()
 
+
+
+# ------------------------------------------------------------ equalizer
+
+EQ_SLIDERS = [21] + [78 + 18 * i for i in range(10)]
+EQ_LABELS = ["60", "170", "310", "600", "1k", "3k", "6k", "12k", "14k", "16k"]
+
+
+def eq_canvas():
+    c = Canvas(W, H)
+    steel = brushed(W, H, (178, 182, 187), (128, 131, 136), 11)
+    c.img = steel.resize((W * S, H * S), Image.NEAREST).convert("RGBA")
+    edge = c.mask()
+    ImageDraw.Draw(edge).rectangle(c.box(0, 0, W, H), outline=255, width=S)
+    c.fill(edge, (34, 35, 38))
+    recess(c, 86, 17, 199, 36, 1, LCD_BG)                 # the graph
+    for x in EQ_SLIDERS:                                  # slider slots
+        recess(c, x, 38, x + 14, 101, 1.5, (22, 22, 24))
+    hex_bolt(c, 6.5, 110, 2.6)
+    hex_bolt(c, 268.5, 110, 2.6)
+    return c
+
+
+def eq_details(img):
+    engrave(img, "preamp", 28 - 14, 104)
+    for i, label in enumerate(EQ_LABELS):
+        tw = text_pixels(label, NARROW)[1]
+        engrave(img, label, EQ_SLIDERS[i + 1] + 7 - tw // 2, 104, NARROW)
+    for text, y in (("+12", 41), ("0", 66), ("-12", 92)):
+        tw = text_pixels(text, NARROW)[1]
+        engrave(img, text, 58 - tw // 2, y, NARROW)
+
+
+def eq_frame(level):
+    """A slider slot with its LEDs lit from the bottom to level (0..1)."""
+    img = Image.new("RGB", (14, 63), (22, 22, 24))
+    px = img.load()
+    for y in range(63):
+        px[6, y] = px[7, y] = (12, 12, 13)          # the groove
+    rows = list(range(58, 3, -3))
+    for i, y in enumerate(rows):
+        t = (i + 0.5) / len(rows)
+        color = GREEN if t < 0.45 else AMBER if t < 0.8 else RED
+        lit = t <= level
+        for x in (2, 3, 10, 11):
+            for dy in (0, 1):
+                px[x, y + dy] = mix(color, (255, 255, 255), 0.2) if lit \
+                    else mix(color, (22, 22, 24), 0.82)
+    return img
+
+
+def eq_thumb(down):
+    c = Canvas(11, 11)
+    c.fill(c.rrect_mask(0, 0, 11, 11, 1.5), (16, 16, 17))
+    c.fill(c.rrect_mask(0.8, 0.8, 10.2, 10.2, 1),
+           c.vgrad(0.8, 10.2, (236, 238, 241) if not down else (196, 198, 202),
+                   (120, 123, 128) if not down else (96, 98, 102)))
+    for y in (2.5, 7.5):
+        c.fill(c.rrect_mask(2, y, 9, y + 0.7, 0), (70, 72, 76, 200))
+    c.fill(c.rrect_mask(1.6, 4.9, 9.4, 6.1, 0),
+           (255, 220, 140) if down else AMBER)
+    return c.down()
+
+
+def build_eq():
+    face = eq_canvas()
+    base = face.down()
+    eq_details(base)
+    sheet = Image.new("RGB", (275, 315), (0, 0, 0))
+    sheet.paste(base, (0, 0))
+    active = title_bar(True, label="EQUALIZER", buttons=("close",))
+    sheet.paste(active, (0, 134))
+    sheet.paste(title_bar(False, label="EQUALIZER", buttons=("close",)),
+                (0, 149))
+    sheet.paste(active.crop((264, 3, 273, 12)), (0, 116))
+    sheet.paste(title_bar(True, "close", "EQUALIZER", ("close",)).crop(
+        (264, 3, 273, 12)), (0, 125))
+    for on in (False, True):
+        for down in (False, True):
+            x = (128 if down else 10) + (59 if on else 0)
+            sheet.paste(toggle_button(face, 14, 18, 26, 12, "on", on, down),
+                        (x, 119))
+            sheet.paste(toggle_button(face, 40, 18, 32, 12, "auto", on, down),
+                        (x + 26, 119))
+    for down in (False, True):
+        sheet.paste(toggle_button(face, 217, 18, 44, 12, "presets", False,
+                                  down, led=False), (224, 176 if down else 164))
+    for i in range(28):
+        sheet.paste(eq_frame(i / 27), (13 + (i % 14) * 15, 164 + (i // 14) * 65))
+    sheet.paste(eq_thumb(False), (0, 164))
+    sheet.paste(eq_thumb(True), (0, 176))
+
+    graph = base.crop((86, 17, 199, 36))
+    px = graph.load()
+    for x in range(0, 113, 4):
+        px[x, 9] = GHOST
+    for x in range(0, 113, 12):
+        for y in range(0, 19, 3):
+            px[x, y] = GHOST
+    sheet.paste(graph, (0, 294))
+    for y in range(19):
+        t = y / 18
+        color = lerp(RED, AMBER, t / 0.4) if t < 0.4 else \
+            lerp(AMBER, GREEN, (t - 0.4) / 0.6)
+        sheet.putpixel((115, 294 + y), tuple(clamp(v) for v in color))
+    for x in range(113):
+        sheet.putpixel((x, 314), mix(AMBER, LCD_BG, 0.55) if x % 2 == 0
+                       else LCD_BG)
+
+    # The window as it looks, for skin viewers: everything at 0 dB
+    eqmain = sheet
+    frame = sheet.crop((13 + (13 % 14) * 15, 164, 13 + (13 % 14) * 15 + 14,
+                        164 + 63))
+    for x in EQ_SLIDERS:
+        eqmain.paste(frame, (x, 38))
+        eqmain.paste(eq_thumb(False), (x + 1, 38 + 25))
+    eqmain.paste(active, (0, 0))
+    eqmain.paste(sheet.crop((10, 119, 36, 131)), (14, 18))
+    eqmain.paste(sheet.crop((36, 119, 68, 131)), (40, 18))
+    eqmain.paste(sheet.crop((224, 164, 268, 176)), (217, 18))
+    eqmain.paste(graph, (86, 17))
+    return eqmain
+
+
+# ------------------------------------------------------------- playlist
+
+PL_TILE = brushed(25, 29, (150, 153, 158), (150, 153, 158), 13)
+
+
+def pl_steel(x, y, w, h):
+    """The playlist's steel at a place in a window: a 25 x 29 tile repeated,
+    so the frame's pieces join wherever they go."""
+    img = Image.new("RGB", (w, h))
+    for ty in range(-(y % 29), h, 29):
+        for tx in range(-(x % 25), w, 25):
+            img.paste(PL_TILE, (tx, ty))
+    return img
+
+
+def pl_canvas(x, y, w, h):
+    c = Canvas(w, h, x, y)
+    c.img = pl_steel(x, y, w, h).resize((w * S, h * S),
+                                        Image.NEAREST).convert("RGBA")
+    return c
+
+
+def line(c, x0, y0, x1, y1, color):
+    c.fill(c.rrect_mask(x0, y0, x1, y1, 0), color)
+
+
+def pl_top(active, x, w, kind):
+    """A piece of the top edge (20 high) at x in a 275-wide window."""
+    c = pl_canvas(x, 0, w, 20)
+    line(c, x, 0, x + w, 1, (34, 35, 38))
+    line(c, x, 1, x + w, 2, (205, 208, 212, 200))
+    line(c, x, 19, x + w, 20, (34, 35, 38))
+    if kind == "left":
+        line(c, 0, 0, 1, 20, (34, 35, 38))
+        line(c, 1, 1, 2, 19, (205, 208, 212, 200))
+    if kind != "title":
+        for y in (8, 11):
+            x0 = 8 if kind == "left" else x
+            x1 = x + w - 17 if kind == "right" else x + w
+            line(c, x0, y, x1, y + 1, (40, 41, 44))
+            line(c, x0, y + 1, x1, y + 2, (210, 212, 216, 170))
+    if kind == "right":
+        line(c, x + w - 1, 0, x + w, 20, (34, 35, 38))
+        bx = x + 14
+        c.fill(c.rrect_mask(bx, 3, bx + 9, 12, 1.5), (18, 18, 20))
+        c.fill(c.rrect_mask(bx + 0.6, 3.6, bx + 8.4, 11.4, 1),
+               c.vgrad(3.6, 11.4, (176, 179, 184), (96, 99, 104)))
+        m = c.mask()
+        d = ImageDraw.Draw(m)
+        d.line([c.pt(bx + 2.6, 5.4), c.pt(bx + 6.4, 9.6)], fill=255,
+               width=int(1.3 * S))
+        d.line([c.pt(bx + 6.4, 5.4), c.pt(bx + 2.6, 9.6)], fill=255,
+               width=int(1.3 * S))
+        c.fill(m, (28, 29, 32))
+    if kind == "title":
+        recess(c, x + 8, 5, x + w - 8, 16, 1.5, (40, 41, 45))
+    img = c.down()
+    if kind == "title":
+        tw = text_pixels("playlist")[1]
+        color = (232, 234, 238) if active else (150, 152, 156)
+        bx = (w - tw) // 2 + 3
+        draw_text(img, "playlist", bx, 8, color)
+        px = img.load()
+        bolt_color = (255, 196, 60) if active else (130, 112, 80)
+        for dx, dy in ((2, 0), (1, 1), (0, 2), (1, 2), (2, 2), (1, 3),
+                       (0, 4)):
+            px[bx - 6 + dx, 8 + dy] = bolt_color
+    if not active:
+        img = Image.blend(img, Image.new("RGB", img.size, (60, 62, 66)), 0.3)
+    return img
+
+
+def pl_side(right):
+    w = 20 if right else 12
+    x = 255 if right else 0
+    c = pl_canvas(x, 20, w, 29)
+    if right:
+        line(c, x, 20, x + 1, 49, (40, 41, 44))
+        line(c, x + 19, 20, x + 20, 49, (34, 35, 38))
+        line(c, x + 4, 20, x + 13, 49, (36, 37, 40))
+        line(c, x + 5, 20, x + 12, 49, (22, 22, 24))
+    else:
+        line(c, 0, 20, 1, 49, (34, 35, 38))
+        line(c, 1, 20, 2, 49, (205, 208, 212, 200))
+        line(c, 11, 20, 12, 49, (40, 41, 44))
+    return c.down()
+
+
+def pl_scroll_thumb(down):
+    c = Canvas(8, 18)
+    c.fill(c.rrect_mask(0, 0, 8, 18, 1.5), (16, 16, 17))
+    c.fill(c.rrect_mask(0.8, 0.8, 7.2, 17.2, 1),
+           c.vgrad(0.8, 17.2, (236, 238, 241) if not down else (196, 198, 202),
+                   (120, 123, 128) if not down else (96, 98, 102)))
+    for y in (6, 8.5, 11):
+        c.fill(c.rrect_mask(2, y, 6, y + 0.7, 0), (70, 72, 76, 200))
+    return c.down()
+
+
+def pl_bottom(x, w, kind):
+    """A piece of the bottom (38 high) of a 275 x 116 window, at x."""
+    y = 78
+    c = pl_canvas(x, y, w, 38)
+    line(c, x, y, x + w, y + 1, (40, 41, 44))
+    line(c, x, y + 1, x + w, y + 2, (205, 208, 212, 150))
+    line(c, x, y + 37, x + w, y + 38, (34, 35, 38))
+    keys = []
+    if kind == "left":
+        line(c, 0, y, 1, y + 38, (34, 35, 38))
+        line(c, 1, y + 1, 2, y + 37, (205, 208, 212, 200))
+        keys = [(14, "add"), (43, "rem"), (72, "sel"), (101, "misc")]
+    if kind == "right":
+        line(c, x + w - 1, y, x + w, y + 38, (34, 35, 38))
+        recess(c, x + 4, y + 8, x + 60, y + 18, 1, LCD_BG)     # running time
+        recess(c, x + 63, y + 21, x + 98, y + 31, 1, LCD_BG)   # mini time
+        keys = [(x - 0 + 104 - x, "list")]
+        # The resize grip
+        for i in range(4):
+            m = c.mask()
+            d = ImageDraw.Draw(m)
+            off = 4 * i
+            d.line([c.pt(x + 147 - off, y + 35), c.pt(x + 147, y + 35 - off)],
+                   fill=255, width=int(0.8 * S))
+            c.fill(m, (60, 62, 66))
+            m = c.mask()
+            ImageDraw.Draw(m).line([c.pt(x + 147 - off, y + 36),
+                                    c.pt(x + 148, y + 35 - off)],
+                                   fill=255, width=int(0.6 * S))
+            c.fill(m, (220, 222, 226, 160))
+    img = c.down()
+    # Buttons: steel keys, drawn on this piece's own steel
+    for kx, label in keys:
+        kx_abs = (x + kx) if kind == "right" else kx
+        key = toggle_button(c, kx_abs, y + 12, 22, 18, label, False, False,
+                            led=False)
+        img.paste(key, (kx_abs - x, 12))
+    if kind == "right":
+        # The small transport: previous, play, pause, stop, next, eject
+        px = img.load()
+        dark = (36, 37, 40)
+        icons = {
+            0: ["#..#", "#.##", "####", "#.##", "#..#"],
+            1: ["#...", "##..", "###.", "##..", "#..."],
+            2: ["#.#", "#.#", "#.#", "#.#", "#.#"],
+            3: ["###", "###", "###", "###", "###"],
+            4: ["#..#", "##.#", "####", "##.#", "#..#"],
+            5: [".#.", "###", "...", "###", "..."],
+        }
+        for i, ix in enumerate((6, 14, 23, 32, 41, 50)):
+            for dy, row in enumerate(icons[i]):
+                for dx, v in enumerate(row):
+                    if v == "#":
+                        px[ix + 2 + dx, 23 + dy] = dark
+    return img
+
+
+def build_playlist():
+    sheet = Image.new("RGB", (280, 186), (0, 0, 0))
+    for active, sy in ((True, 0), (False, 21)):
+        sheet.paste(pl_top(active, 0, 25, "left"), (0, sy))
+        sheet.paste(pl_top(active, 87, 100, "title"), (26, sy))
+        sheet.paste(pl_top(active, 25, 25, "tile"), (127, sy))
+        sheet.paste(pl_top(active, 250, 25, "right"), (153, sy))
+    sheet.paste(pl_side(False), (0, 42))
+    sheet.paste(pl_side(True), (31, 42))
+    sheet.paste(pl_scroll_thumb(False), (52, 53))
+    sheet.paste(pl_scroll_thumb(True), (61, 53))
+    pressed = Canvas(9, 9)
+    pressed.fill(pressed.rrect_mask(0, 0, 9, 9, 1.5), (18, 18, 20))
+    pressed.fill(pressed.rrect_mask(0.6, 0.6, 8.4, 8.4, 1),
+                 pressed.vgrad(0.6, 8.4, (66, 68, 73), (40, 41, 45)))
+    m = pressed.mask()
+    d = ImageDraw.Draw(m)
+    d.line([pressed.pt(2.6, 2.8), pressed.pt(6.4, 7.0)], fill=255,
+           width=int(1.3 * S))
+    d.line([pressed.pt(6.4, 2.8), pressed.pt(2.6, 7.0)], fill=255,
+           width=int(1.3 * S))
+    pressed.fill(m, (255, 190, 80))
+    sheet.paste(pressed.down(), (52, 42))
+    sheet.paste(pl_bottom(0, 125, "left"), (0, 72))
+    sheet.paste(pl_bottom(125, 150, "right"), (126, 72))
+    sheet.paste(pl_bottom(125, 25, "tile"), (179, 0))
+    sheet.paste(pl_bottom(125, 75, "tile"), (205, 0))
+    return sheet
+
+
+PLEDIT_TXT = """[Text]
+Normal=#D8A050
+Current=#FFD070
+NormalBG=#100B06
+SelectedBG=#3A2610
+Font=Arial
+"""
 
 # ---------------------------------------------------------------- sheets
 
@@ -826,6 +1157,9 @@ def build():
                         GREEN)
     viscolor += [(255, 240, 200)] + [lerp(AMBER, LCD_BG, i / 5)
                                      for i in range(5)]
+    files["eqmain.bmp"] = build_eq()
+    files["pledit.bmp"] = build_playlist()
+    files["pledit.txt"] = PLEDIT_TXT
     files["viscolor.txt"] = "".join(
         "%d,%d,%d\n" % tuple(clamp(v) for v in c) for c in viscolor)
     return files

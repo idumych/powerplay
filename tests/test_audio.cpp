@@ -4,6 +4,7 @@
  *
  * Copyright 2026 the PowerPlay authors. MIT licence.
  */
+#include "Equalizer.h"
 #include "PlayHead.h"
 #include "Playlist.h"
 
@@ -429,6 +430,57 @@ TestPlaylist()
 }
 
 
+// The equalizer: off or flat leaves sound alone; a boosted band lifts its
+// own frequency and not a far one; the preamp scales; a band above the
+// sample rate's reach is left out.
+static double
+SineGain(audio::Equalizer& eq, double frequency, double rate)
+{
+	const size_t frames = size_t(rate);		// a second
+	std::vector<float> samples(frames * 2);
+	for (size_t i = 0; i < frames; i++)
+		samples[i * 2] = samples[i * 2 + 1]
+			= float(0.1 * std::sin(2 * M_PI * frequency * i / rate));
+	eq.Process(samples.data(), frames);
+	// The level over the second half, after the filters settle
+	double peak = 0;
+	for (size_t i = frames / 2; i < frames; i++)
+		peak = std::max(peak, std::fabs((double)samples[i * 2]));
+	return peak / 0.1;
+}
+
+
+static void
+TestEqualizer()
+{
+	audio::Equalizer eq;
+	eq.SetSampleRate(44100);
+	eq.SetBand(4, 12);		// 1 kHz
+	CHECK(std::fabs(SineGain(eq, 1000, 44100) - 1) < 1e-3, "off: untouched");
+
+	eq.SetEnabled(true);
+	double boosted = SineGain(eq, 1000, 44100);
+	CHECK(boosted > 3.6 && boosted < 4.3, "+12 dB at 1 kHz: x%.2f", boosted);
+	double far = SineGain(eq, 60, 44100);
+	CHECK(far > 0.9 && far < 1.15, "1 kHz boost leaves 60 Hz: x%.2f", far);
+
+	eq.SetBand(4, 0);
+	CHECK(std::fabs(SineGain(eq, 1000, 44100) - 1) < 1e-3, "flat: untouched");
+	eq.SetPreamp(-6);
+	double preamp = SineGain(eq, 1000, 44100);
+	CHECK(preamp > 0.49 && preamp < 0.51, "preamp -6 dB: x%.3f", preamp);
+
+	// 16 kHz can't be played at 24 kHz: no filter, no blow-up
+	audio::Equalizer low;
+	low.SetSampleRate(24000);
+	low.SetEnabled(true);
+	low.SetBand(9, 12);
+	double gain = SineGain(low, 1000, 24000);
+	CHECK(std::fabs(gain - 1) < 1e-3, "band above Nyquist left out: x%.3f",
+		gain);
+}
+
+
 int
 main()
 {
@@ -440,6 +492,7 @@ main()
 	TestThreaded();
 	TestFormatTime();
 	TestPlaylist();
+	TestEqualizer();
 	if (sFailures == 0)
 		std::printf("all audio tests passed\n");
 	return sFailures == 0 ? 0 : 1;

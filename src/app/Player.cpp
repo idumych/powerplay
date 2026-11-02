@@ -181,6 +181,7 @@ Player::Open(const entry_ref& ref, bool atEnd)
 		fEnded = false;
 		fPlaying = false;
 		fMeter.SetSampleRate(fOutputRate);
+		fEqualizer.SetSampleRate(fOutputRate);
 	}
 
 	fReadBuffer = new float[readCapacity * decoded.channel_count];
@@ -288,6 +289,17 @@ Player::IsPlaying() const
 {
 	BAutolock _(fLock);
 	return fPlaying;
+}
+
+
+void
+Player::SetEqualizer(bool enabled, float preamp, const float* bands)
+{
+	BAutolock _(fLock);
+	fEqualizer.SetPreamp(preamp);
+	for (int band = 0; band < audio::Equalizer::kBands; band++)
+		fEqualizer.SetBand(band, bands[band]);
+	fEqualizer.SetEnabled(enabled);
 }
 
 
@@ -455,6 +467,7 @@ Player::_Render(float* out, size_t frames, uint32 channels)
 	bool wake = false;
 	if (fPlaying && fCache != NULL) {
 		audio::PlayHead::Result result = fHead.Render(*fCache, out, frames);
+		fEqualizer.Process(out, frames);
 		if (result == audio::PlayHead::kStarved)
 			fStarved++;
 		else if (result == audio::PlayHead::kEnded) {

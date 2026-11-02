@@ -17,6 +17,7 @@
 #include <OS.h>
 #include <String.h>
 
+#include "Equalizer.h"
 #include "PlayHead.h"
 #include "VUMeter.h"
 
@@ -55,6 +56,9 @@ public:
 			float				Volume() const;
 			// -1 (left) to 1 (right)
 			void				SetBalance(float balance);
+			// The equalizer: on or off, preamp and bands in dB (-12..12)
+			void				SetEqualizer(bool enabled, float preamp,
+									const float* bands);
 			float				Balance() const;
 
 			// What the file is, for a skin's display (0 when unknown)
@@ -104,6 +108,7 @@ private:
 
 			audio::ChunkCache*	fCache;
 			audio::PlayHead		fHead;
+			audio::Equalizer	fEqualizer;
 			double				fOutputRate;
 
 			// The decoder thread's own state

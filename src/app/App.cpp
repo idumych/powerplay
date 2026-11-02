@@ -38,6 +38,7 @@
 #include "PlayerWindow.h"
 #include "Playlist.h"
 #include "PlaylistWindow.h"
+#include "SkinPanels.h"
 #include "SkinWindow.h"
 #include "Skins.h"
 #include "WinampSkin.h"
@@ -140,6 +141,12 @@ private:
 			void				_UpdateSkin(float left, float right);
 			void				_PublishLevels();
 			bool				_ApplySkin(const char* path);
+			bool				_SkinPathSet() const
+									{ return fSkinPath.Length() > 0; }
+			void				_ApplyEqualizer();
+			static bool			_IsShown(BWindow* window);
+			static void			_ShowWindow(BWindow* window, bool show);
+			static void			_ToggleWindow(BWindow* window);
 			bool				_SkinShown();
 			int32				_RandomOther();
 			void				_ToggleDeskbar();
@@ -151,6 +158,11 @@ private:
 			audio::Playlist		fPlaylist;
 			PlayerWindow*		fWindow;
 			SkinWindow*			fSkinWindow;
+			SkinEqWindow*		fSkinEq;
+			SkinPlaylistWindow*	fSkinPlaylist;
+			// The built-in skin, for what other skins lack
+			skin::WinampSkin	fBaseSkin;
+			bool				fBaseSkinLoaded;
 			PlaylistWindow*		fPlaylistWindow;
 			BFilePanel*			fOpenPanel;
 			BFilePanel*			fAddPanel;
@@ -169,6 +181,13 @@ private:
 			BString				fSkinPath;
 			BPoint				fSkinWhere;
 			bool				fSkinDoubleSize;
+			BPoint				fSkinEqWhere;
+			bool				fSkinEqShown;
+			BRect				fSkinPlaylistFrame;
+			bool				fSkinPlaylistShown;
+			bool				fEqOn;
+			float				fEqPreamp;
+			float				fEqBands[skin::kEqBands];
 			bool				fLively;
 			bool				fPlaylistShown;
 			double				fResumePosition;
@@ -180,6 +199,9 @@ PowerPlayApp::PowerPlayApp()
 	BApplication(kAppSignature),
 	fWindow(NULL),
 	fSkinWindow(NULL),
+	fSkinEq(NULL),
+	fSkinPlaylist(NULL),
+	fBaseSkinLoaded(false),
 	fPlaylistWindow(NULL),
 	fOpenPanel(NULL),
 	fAddPanel(NULL),
@@ -199,10 +221,18 @@ PowerPlayApp::PowerPlayApp()
 	fBalance(0),
 	fSkinWhere(100, 100),
 	fSkinDoubleSize(false),
+	fSkinEqWhere(-1, -1),
+	fSkinEqShown(false),
+	fSkinPlaylistFrame(0, 0, -1, -1),
+	fSkinPlaylistShown(false),
+	fEqOn(false),
+	fEqPreamp(0),
 	fLively(true),
 	fPlaylistShown(false),
 	fResumePosition(0)
 {
+	for (float& gain : fEqBands)
+		gain = 0;
 	_LoadSettings();
 	fWindow = new PlayerWindow(fWindowFrame);
 	fWindow->SetVolume(fVolume);
@@ -212,9 +242,24 @@ PowerPlayApp::PowerPlayApp()
 	fPlayer.SetVolume(fVolume * fVolume);
 	fPlayer.SetLivelyMeter(fLively);
 	fPlayer.SetBalance(fBalance);
+	_ApplyEqualizer();
 	fSkinWindow = new SkinWindow(fSkinWhere);
+	// The equalizer and playlist open under it, Winamp's stack
+	if (fSkinEqWhere.x < 0)
+		fSkinEqWhere = fSkinWhere + BPoint(0, skin::kMainHeight);
+	if (!fSkinPlaylistFrame.IsValid()) {
+		fSkinPlaylistFrame = BRect(0, 0, skin::kPlaylistMinWidth - 1,
+			skin::kPlaylistMinHeight + 2 * skin::kPlaylistHeightStep - 1);
+		fSkinPlaylistFrame.OffsetTo(fSkinWhere
+			+ BPoint(0, 2 * skin::kMainHeight));
+	}
+	fSkinEq = new SkinEqWindow(fSkinEqWhere);
+	fSkinPlaylist = new SkinPlaylistWindow(fSkinPlaylistFrame);
 	if (fSkinDoubleSize)
+	{
 		fSkinWindow->SetDoubleSize(true);
+		fSkinEq->SetDoubleSize(true);
+	}
 }
 
 
@@ -491,7 +536,51 @@ PowerPlayApp::MessageReceived(BMessage* message)
 			break;
 
 		case kMsgShowPlaylist:
-			_ShowPlaylist();
+			if (_SkinShown())
+				_ToggleWindow(fSkinPlaylist);
+			else
+				_ShowPlaylist();
+			_UpdateWindow();
+			break;
+
+		case kMsgShowEqualizer:
+			if (_SkinShown())
+				_ToggleWindow(fSkinEq);
+			_UpdateWindow();
+			break;
+
+		case kMsgSetEqualizer:
+		{
+			bool on;
+			if (message->FindBool("on", &on) == B_OK)
+				fEqOn = on;
+			int32 band;
+			float gain;
+			if (message->FindInt32("band", &band) == B_OK
+				&& message->FindFloat("gain", &gain) == B_OK) {
+				if (band < 0)
+					fEqPreamp = gain;
+				else if (band < skin::kEqBands)
+					fEqBands[band] = gain;
+			}
+			for (int32 i = 0; i < skin::kEqBands
+					&& message->FindFloat("bands", i, &gain) == B_OK; i++)
+				fEqBands[i] = gain;
+			if (message->FindFloat("preamp", &gain) == B_OK)
+				fEqPreamp = gain;
+			_ApplyEqualizer();
+			break;
+		}
+
+		case kMsgToggleDoubleSize:
+			fSkinWindow->PostMessage(kMsgToggleDoubleSize);
+			break;
+
+		case kMsgSkinDoubleSize:
+			if (fSkinEq->Lock()) {
+				fSkinEq->SetDoubleSize(message->GetBool("double", false));
+				fSkinEq->Unlock();
+			}
 			break;
 
 		case kMsgPlaylistAdd:
@@ -622,6 +711,18 @@ PowerPlayApp::QuitRequested()
 		fSkinWhere = fSkinWindow->Frame().LeftTop();
 		fSkinDoubleSize = fSkinWindow->DoubleSize();
 		fSkinWindow->Quit();
+	}
+	if (fSkinEq->Lock()) {
+		fSkinEqWhere = fSkinEq->Frame().LeftTop();
+		if (_SkinPathSet())
+			fSkinEqShown = !fSkinEq->IsHidden();
+		fSkinEq->Quit();
+	}
+	if (fSkinPlaylist->Lock()) {
+		fSkinPlaylistFrame = fSkinPlaylist->Frame();
+		if (_SkinPathSet())
+			fSkinPlaylistShown = !fSkinPlaylist->IsHidden();
+		fSkinPlaylist->Quit();
 	}
 	if (fWindow->Lock()) {
 		fWindowFrame = fWindow->Frame();
@@ -848,13 +949,14 @@ PowerPlayApp::_RemoveFromPlaylist(BMessage* message)
 void
 PowerPlayApp::_PlaylistChanged()
 {
-	if (fPlaylistWindow == NULL)
-		return;
 	BMessage update(kMsgPlaylistUpdate);
 	for (int32 i = 0; i < fPlaylist.CountItems(); i++)
 		update.AddString("path", fPlaylist.PathAt(i).c_str());
 	update.AddInt32("current", fPlaylist.Current());
-	fPlaylistWindow->PostMessage(&update);
+	if (fPlaylistWindow != NULL)
+		fPlaylistWindow->PostMessage(&update);
+	if (fSkinPlaylist != NULL)
+		fSkinPlaylist->PostMessage(&update);
 }
 
 
@@ -892,6 +994,62 @@ PowerPlayApp::_RandomOther()
 }
 
 
+void
+PowerPlayApp::_ApplyEqualizer()
+{
+	fPlayer.SetEqualizer(fEqOn, fEqPreamp, fEqBands);
+	if (fSkinEq == NULL)
+		return;
+	skin::EqState state;
+	state.on = fEqOn;
+	state.preamp = fEqPreamp;
+	for (int i = 0; i < skin::kEqBands; i++)
+		state.bands[i] = fEqBands[i];
+	if (fSkinEq->Lock()) {
+		fSkinEq->SetEqualizer(state);
+		fSkinEq->Unlock();
+	}
+}
+
+
+bool
+PowerPlayApp::_IsShown(BWindow* window)
+{
+	if (window == NULL || !window->Lock())
+		return false;
+	bool shown = !window->IsHidden();
+	window->Unlock();
+	return shown;
+}
+
+
+void
+PowerPlayApp::_ShowWindow(BWindow* window, bool show)
+{
+	if (window == NULL || !window->Lock())
+		return;
+	if (show && window->IsHidden())
+		window->Show();
+	else if (!show && !window->IsHidden())
+		window->Hide();
+	window->Unlock();
+}
+
+
+void
+PowerPlayApp::_ToggleWindow(BWindow* window)
+{
+	if (window == NULL || !window->Lock())
+		return;
+	if (window->IsHidden()) {
+		window->Show();
+		window->Activate();
+	} else
+		window->Hide();
+	window->Unlock();
+}
+
+
 bool
 PowerPlayApp::_SkinShown()
 {
@@ -908,7 +1066,13 @@ bool
 PowerPlayApp::_ApplySkin(const char* path)
 {
 	if (path == NULL || path[0] == '\0') {
+		if (_SkinPathSet()) {
+			fSkinEqShown = _IsShown(fSkinEq);
+			fSkinPlaylistShown = _IsShown(fSkinPlaylist);
+		}
 		fSkinPath = "";
+		_ShowWindow(fSkinEq, false);
+		_ShowWindow(fSkinPlaylist, false);
 		if (fSkinWindow->Lock()) {
 			if (!fSkinWindow->IsHidden())
 				fSkinWindow->Hide();
@@ -933,9 +1097,31 @@ PowerPlayApp::_ApplySkin(const char* path)
 		alert->Go(NULL);
 		return false;
 	}
+	// What the skin lacks (often the playlist or equalizer) comes from
+	// PowerPlay's own, as Winamp's base skin fills in for its
+	if (!fBaseSkinLoaded)
+		fBaseSkinLoaded = load_skin(fBaseSkin, kBuiltInSkin);
+	if (fBaseSkinLoaded)
+		newSkin->FillMissing(fBaseSkin);
+	std::shared_ptr<skin::WinampSkin> shared(newSkin);
+	bool wasSkinned = _SkinPathSet();
 	fSkinPath = path;
+	if (fSkinEq->Lock()) {
+		fSkinEq->SetSkin(shared);
+		fSkinEq->Unlock();
+	}
+	if (fSkinPlaylist->Lock()) {
+		fSkinPlaylist->SetSkin(shared);
+		fSkinPlaylist->Unlock();
+	}
+	if (!wasSkinned) {
+		_ShowWindow(fSkinEq, fSkinEqShown);
+		_ShowWindow(fSkinPlaylist, fSkinPlaylistShown);
+		_ApplyEqualizer();
+		_PlaylistChanged();
+	}
 	if (fSkinWindow->Lock()) {
-		fSkinWindow->SetSkin(newSkin, path);
+		fSkinWindow->SetSkin(shared, path);
 		if (fSkinWindow->IsHidden())
 			fSkinWindow->Show();
 		fSkinWindow->Activate();
@@ -984,9 +1170,11 @@ PowerPlayApp::_UpdateSkin(float left, float right)
 	state.balance = fBalance;
 	state.shuffle = fShuffle;
 	state.repeat = fRepeat;
-	if (fPlaylistWindow != NULL && fPlaylistWindow->Lock()) {
-		state.playlist = !fPlaylistWindow->IsHidden();
-		fPlaylistWindow->Unlock();
+	state.playlist = _IsShown(fSkinPlaylist);
+	state.equalizer = _IsShown(fSkinEq);
+	if (state.playlist && fSkinPlaylist->Lock()) {
+		fSkinPlaylist->SetTimes(position, duration);
+		fSkinPlaylist->Unlock();
 	}
 	state.levelLeft = left;
 	state.levelRight = right;
@@ -1112,6 +1300,20 @@ PowerPlayApp::_LoadSettings()
 	fBalance = settings.GetFloat("balance", fBalance);
 	fSkinPath = settings.GetString("skin", "");
 	fSkinDoubleSize = settings.GetBool("skin double size", fSkinDoubleSize);
+	BPoint eqWhere;
+	if (settings.FindPoint("skin eq where", &eqWhere) == B_OK
+		&& screen.Contains(eqWhere + BPoint(20, 10)))
+		fSkinEqWhere = eqWhere;
+	fSkinEqShown = settings.GetBool("skin eq shown", fSkinEqShown);
+	if (settings.FindRect("skin playlist frame", &frame) == B_OK
+		&& screen.Contains(frame.LeftTop() + BPoint(20, 10)))
+		fSkinPlaylistFrame = frame;
+	fSkinPlaylistShown = settings.GetBool("skin playlist shown",
+		fSkinPlaylistShown);
+	fEqOn = settings.GetBool("eq on", fEqOn);
+	fEqPreamp = settings.GetFloat("eq preamp", fEqPreamp);
+	for (int32 i = 0; i < skin::kEqBands; i++)
+		settings.FindFloat("eq bands", i, &fEqBands[i]);
 	BPoint where;
 	if (settings.FindPoint("skin where", &where) == B_OK
 		&& screen.Contains(where + BPoint(20, 10)))
@@ -1145,6 +1347,14 @@ PowerPlayApp::_SaveSettings()
 	settings.AddString("skin", fSkinPath);
 	settings.AddPoint("skin where", fSkinWhere);
 	settings.AddBool("skin double size", fSkinDoubleSize);
+	settings.AddPoint("skin eq where", fSkinEqWhere);
+	settings.AddBool("skin eq shown", fSkinEqShown);
+	settings.AddRect("skin playlist frame", fSkinPlaylistFrame);
+	settings.AddBool("skin playlist shown", fSkinPlaylistShown);
+	settings.AddBool("eq on", fEqOn);
+	settings.AddFloat("eq preamp", fEqPreamp);
+	for (int32 i = 0; i < skin::kEqBands; i++)
+		settings.AddFloat("eq bands", fEqBands[i]);
 	settings.AddBool("playlist shown", fPlaylistShown);
 	for (int32 i = 0; i < fPlaylist.CountItems(); i++)
 		settings.AddString("playlist", fPlaylist.PathAt(i).c_str());

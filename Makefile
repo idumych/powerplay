@@ -24,10 +24,12 @@ COSMOE_ROOT ?= /usr
 
 # All .cpp files, with their directories. Header dirs go in INCLUDES.
 CORE_SRCS := src/core/VUMeter.cpp src/core/PlayHead.cpp src/core/Playlist.cpp \
+             src/core/Equalizer.cpp \
              src/core/Archive.cpp src/core/WinampSkin.cpp
 SRCS     := $(CORE_SRCS) src/app/App.cpp src/app/Controls.cpp \
             src/app/DeskbarVU.cpp src/app/Player.cpp src/app/PlayerWindow.cpp \
-            src/app/PlaylistWindow.cpp src/app/SkinWindow.cpp \
+            src/app/PlaylistWindow.cpp src/app/SkinPanels.cpp \
+            src/app/SkinWindow.cpp \
             src/app/Skins.cpp src/app/VUView.cpp
 INCLUDES := src/core src/app
 # Libraries beyond the Haiku API (same on every platform), e.g. -lsqlite3 -lcrypto.
@@ -120,7 +122,8 @@ test: tests/test_core.cpp tests/test_audio.cpp tests/test_skin.cpp \
 	$(CXX) -std=c++17 -Wall -O1 -g -Isrc/core tests/test_core.cpp \
 		src/core/VUMeter.cpp -o obj/test_core
 	$(CXX) -std=c++17 -Wall -O1 -g -pthread -Isrc/core tests/test_audio.cpp \
-		src/core/PlayHead.cpp src/core/Playlist.cpp -o obj/test_audio
+		src/core/PlayHead.cpp src/core/Playlist.cpp src/core/Equalizer.cpp \
+		-o obj/test_audio
 	$(CXX) -std=c++17 -Wall -O1 -g -Isrc/core tests/test_skin.cpp \
 		src/core/Archive.cpp src/core/WinampSkin.cpp -lz -o obj/test_skin
 	./obj/test_core

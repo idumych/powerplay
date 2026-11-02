@@ -17,6 +17,7 @@ measured from screenshots.
 | Playing a file (BMediaFile + BSoundPlayer) | WAV played on Haiku R1/beta6 in QEMU (emulated HDA, output captured): full length, no dropouts, level unchanged |
 | Vector icon (HVIF, tools/make-icon.py) | done; checked in Tracker, Deskbar and About on Haiku R1/beta6 |
 | Playlist, main window like SoundPlay's | not started |
+| Skinned equalizer and playlist windows; the equalizer in the audio path | done, host tests (equalizer response, layout); checked on Linux (X11) with four skins |
 | Built-in Power Station skin (optional) | done, host test; seen on Linux (X11) and Haiku R1/beta6 |
 | Winamp 2.x skins for the main window (.wsz or a folder; Skins menu) | done, host tests; the four test skins checked on Linux (X11, clicks, sliders, drag, relaunch) and drawn on Haiku R1/beta6; no playlist or equalizer skins, no region.txt shapes yet |
 | Linux (Hokku) | builds unchanged against Hokku 29097935 and opens under Xvfb (X11): window, meter, About; no Deskbar on Linux yet; sound not tried |
@@ -37,7 +38,11 @@ resource), or in any other Winamp 2.x skin; "PowerPlay window" goes back.
 To add skins, put `.wsz` files (or folders of unpacked ones) in `~/config/settings/PowerPlay/Skins`
 (`~/.config/cosmoe/PowerPlay/Skins` on Linux), or drop a `.wsz` on the
 player to copy it there, then choose it from the Skins menu. Right-click a
-skin for the menu. The clutter bar's D (or Command+D, or Double size in the
+skin for the menu. Its EQ and PL buttons open the skin's equalizer (ten
+bands and a preamp, with Winamp's presets) and playlist (drag its corner to
+resize it; ADD, REM, SEL, MISC and LIST open menus; double-click an entry
+to play it, Delete removes the selection). A skin without them borrows
+Power Station's. The clutter bar's D (or Command+D, or Double size in the
 menu) draws the skin at twice its size. The keys are Winamp's: z previous,
 x play, c pause, v stop, b next. PowerPlay comes with no skins but its own.
 

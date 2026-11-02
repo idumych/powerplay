@@ -7,6 +7,7 @@
 #define POWERPLAY_SKIN_WINDOW_H
 
 #include <String.h>
+#include <memory>
 #include <Window.h>
 
 #include "WinampSkin.h"
@@ -25,7 +26,7 @@ public:
 	virtual	void				MessageReceived(BMessage* message);
 
 			// With the window locked
-			void				SetSkin(skin::WinampSkin* skin,
+			void				SetSkin(std::shared_ptr<skin::WinampSkin> skin,
 									const char* path);
 			const char*			SkinPath() const { return fSkinPath.String(); }
 			// What the app knows; the window keeps its own pressed control,
