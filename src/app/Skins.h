@@ -12,7 +12,7 @@ class BMenu;
 namespace skin { class WinampSkin; }
 
 // The skin built into PowerPlay (a resource), by the name settings and
-// kMsgSetSkin use for it; also the default look.
+// kMsgSetSkin use for it.
 extern const char* const kBuiltInSkin;
 
 // The folder PowerPlay looks for skins in (.wsz files or folders), in its

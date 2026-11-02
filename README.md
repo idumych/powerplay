@@ -17,7 +17,7 @@ measured from screenshots.
 | Playing a file (BMediaFile + BSoundPlayer) | WAV played on Haiku R1/beta6 in QEMU (emulated HDA, output captured): full length, no dropouts, level unchanged |
 | Vector icon (HVIF, tools/make-icon.py) | done; checked in Tracker, Deskbar and About on Haiku R1/beta6 |
 | Playlist, main window like SoundPlay's | not started |
-| Built-in Power Station skin, the default look | done, host test; seen on Linux (X11) and Haiku R1/beta6 |
+| Built-in Power Station skin (optional) | done, host test; seen on Linux (X11) and Haiku R1/beta6 |
 | Winamp 2.x skins for the main window (.wsz or a folder; Skins menu) | done, host tests; the four test skins checked on Linux (X11, clicks, sliders, drag, relaunch) and drawn on Haiku R1/beta6; no playlist or equalizer skins, no region.txt shapes yet |
 | Linux (Hokku) | builds unchanged against Hokku 29097935 and opens under Xvfb (X11): window, meter, About; no Deskbar on Linux yet; sound not tried |
 
@@ -27,14 +27,14 @@ On Haiku: `make`, then `./PowerPlay [file]`. Host tests on any system: `make tes
 
 ## Skins
 
-PowerPlay opens in its own skin, Power Station: a brushed-steel panel with
-amber displays, status lamps, push buttons, LED faders and a hazard-striped
-kick plate. It is drawn by `tools/make-skin.py` (Pillow), which writes
-`data/PowerStation.wsz`; the app carries it as a resource. "PowerPlay window"
-in the Skins menu switches to the plain window.
+PowerPlay opens in its own SoundPlay-style window. From the Skins menu it
+can instead look like a classic Winamp 2.x player, either in its own skin,
+Power Station (a brushed-steel panel with amber displays, status lamps, push
+buttons, LED faders and a hazard-striped kick plate, drawn by
+`tools/make-skin.py` into `data/PowerStation.wsz` and carried as a
+resource), or in any other Winamp 2.x skin; "PowerPlay window" goes back.
 
-PowerPlay can also wear other classic Winamp 2.x skins. Put `.wsz` skins (or
-folders of unpacked ones) in `~/config/settings/PowerPlay/Skins`
+To add skins, put `.wsz` files (or folders of unpacked ones) in `~/config/settings/PowerPlay/Skins`
 (`~/.config/cosmoe/PowerPlay/Skins` on Linux), or drop a `.wsz` on the
 player to copy it there, then choose it from the Skins menu. Right-click a
 skin for the menu. The keys are Winamp's: z previous, x play, c pause,

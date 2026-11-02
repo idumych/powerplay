@@ -196,7 +196,6 @@ PowerPlayApp::PowerPlayApp()
 #endif
 	fShuffle(false),
 	fBalance(0),
-	fSkinPath(kBuiltInSkin),
 	fSkinWhere(100, 100),
 	fLively(true),
 	fPlaylistShown(false),
@@ -1106,7 +1105,7 @@ PowerPlayApp::_LoadSettings()
 	fLively = settings.GetBool("lively needles", fLively);
 	fShuffle = settings.GetBool("shuffle", fShuffle);
 	fBalance = settings.GetFloat("balance", fBalance);
-	fSkinPath = settings.GetString("skin", kBuiltInSkin);
+	fSkinPath = settings.GetString("skin", "");
 	BPoint where;
 	if (settings.FindPoint("skin where", &where) == B_OK
 		&& screen.Contains(where + BPoint(20, 10)))
