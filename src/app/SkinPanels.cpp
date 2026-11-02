@@ -526,8 +526,13 @@ SkinPlaylistView::_ScrollTo(int top)
 void
 SkinPlaylistView::FrameResized(float width, float height)
 {
-	delete fBitmap;
-	fBitmap = new BBitmap(BRect(0, 0, width, height), B_RGB32);
+	// The view's real size, whatever the message said: it may be stale
+	BRect bounds = Bounds();
+	if (fBitmap == NULL || fBitmap->Bounds().Width() != bounds.Width()
+		|| fBitmap->Bounds().Height() != bounds.Height()) {
+		delete fBitmap;
+		fBitmap = new BBitmap(bounds.OffsetToCopy(B_ORIGIN), B_RGB32);
+	}
 	_ScrollTo(fTop);
 }
 
@@ -537,8 +542,18 @@ SkinPlaylistView::_Redraw()
 {
 	if (!fSkin || fBitmap == NULL || fBitmap->InitCheck() != B_OK)
 		return;
-	fSkin->RenderPlaylist(fState, _Width(), _Height(),
-		(uint32_t*)fBitmap->Bits(), fBitmap->BytesPerRow());
+	// The bitmap's own size: while a resize is under way the view may
+	// already be bigger than the bitmap, until FrameResized() makes a new
+	// one, and drawing at the view's size would run past its end.
+	BRect size = fBitmap->Bounds();
+	int width = int(size.Width()) + 1;
+	int height = int(size.Height()) + 1;
+	if (width != _Width() || height != _Height()) {
+		FrameResized(Bounds().Width(), Bounds().Height());
+		return;
+	}
+	fSkin->RenderPlaylist(fState, width, height, (uint32_t*)fBitmap->Bits(),
+		fBitmap->BytesPerRow());
 	Invalidate();
 }
 
