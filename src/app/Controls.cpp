@@ -7,7 +7,7 @@
 #include "Controls.h"
 
 #include <ControlLook.h>
-#include <GradientLinear.h>
+#include <Bitmap.h>
 #include <Window.h>
 
 #include <math.h>
@@ -587,11 +587,79 @@ PositionBar::PreferredSize()
 VolumeKnob::VolumeKnob(const char* name, BMessage* message)
 	:
 	BControl(name, NULL, message, B_WILL_DRAW | B_NAVIGABLE),
+	fDisc(NULL),
 	fTracking(false),
 	fStartY(0),
 	fStartValue(0)
 {
 	SetValueNoUpdate(80);
+}
+
+
+VolumeKnob::~VolumeKnob()
+{
+	delete fDisc;
+}
+
+
+static inline float
+Clamp01(float value)
+{
+	return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+
+static inline rgb_color
+MixColor(rgb_color a, rgb_color b, float amount)
+{
+	rgb_color mixed;
+	mixed.red = (uint8)lroundf(a.red + (b.red - a.red) * amount);
+	mixed.green = (uint8)lroundf(a.green + (b.green - a.green) * amount);
+	mixed.blue = (uint8)lroundf(a.blue + (b.blue - a.blue) * amount);
+	mixed.alpha = 255;
+	return mixed;
+}
+
+
+// SoundPlay's flat knob, measured from the original: a soft grey ring, a
+// dark rim, a bevel ring white at the top left and grey at the bottom
+// right, and a light face. Each pixel takes its colour from its distance to
+// the centre; the edge is antialiased by coverage, in grey only.
+void
+VolumeKnob::_RenderDisc(int32 size)
+{
+	delete fDisc;
+	fDisc = new BBitmap(BRect(0, 0, size - 1, size - 1), B_RGBA32);
+	uint8* bits = (uint8*)fDisc->Bits();
+	int32 bpr = fDisc->BytesPerRow();
+	float c = size / 2.0f;
+	float r = size / 2.0f;
+	for (int32 y = 0; y < size; y++) {
+		for (int32 x = 0; x < size; x++) {
+			float dx = x + 0.5f - c;
+			float dy = y + 0.5f - c;
+			float d = sqrtf(dx * dx + dy * dy);
+			// From the top left (0) to the bottom right (1)
+			float light = Clamp01(0.5f + (dx + dy) / (2.8f * r));
+			rgb_color color;
+			if (d > r - 1)
+				color = kShadow;
+			else if (d > r - 2)
+				color = kKnobRim;
+			else if (d > r - 4) {
+				color = light < 0.43f
+					? MixColor(kHighlight, kKnobFace, light / 0.43f)
+					: MixColor(kKnobFace, kKnobLow, (light - 0.43f) / 0.57f);
+			} else
+				color = kKnobFace;
+			float alpha = Clamp01(r - d + 0.5f);
+			uint8* pixel = bits + y * bpr + x * 4;
+			pixel[0] = color.blue;
+			pixel[1] = color.green;
+			pixel[2] = color.red;
+			pixel[3] = (uint8)lroundf(alpha * 255);
+		}
+	}
 }
 
 
@@ -613,28 +681,25 @@ VolumeKnob::Draw(BRect updateRect)
 	SetHighColor(ViewColor());
 	FillRect(bounds);
 
-	float size = fminf(bounds.Width(), bounds.Height()) - 1;
-	BPoint c((bounds.left + bounds.right) / 2,
-		(bounds.top + bounds.bottom) / 2);
-	float r = size / 2;
-	SetFlags(Flags() | B_SUBPIXEL_PRECISE);
-
-	// SoundPlay's flat knob: a dark rim, a bevel ring white at the top
-	// left and grey at the bottom right, a light face and a red dot.
-	SetHighColor(kKnobRim);
-	FillEllipse(c, r, r);
-	BGradientLinear bevel(BPoint(c.x - r, c.y - r), BPoint(c.x + r, c.y + r));
-	bevel.AddColor(kHighlight, 0);
-	bevel.AddColor(kKnobFace, 110);
-	bevel.AddColor(kKnobLow, 255);
-	FillEllipse(c, r - 1, r - 1, bevel);
-	SetHighColor(kKnobFace);
-	FillEllipse(c, r - 3, r - 3);
+	// The disc fills the view, computed pixel by pixel (grey-only
+	// antialiasing, so it looks the same whatever the system's
+	// antialiasing settings are).
+	int32 size = (int32)fminf(bounds.Width(), bounds.Height()) + 1;
+	BPoint c(bounds.left + size / 2.0f, bounds.top + size / 2.0f);
+	float r = size / 2.0f;
+	if (fDisc == NULL || fDisc->Bounds().IntegerWidth() + 1 != size)
+		_RenderDisc(size);
+	SetDrawingMode(B_OP_ALPHA);
+	SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+	DrawBitmap(fDisc, bounds.LeftTop());
+	SetDrawingMode(B_OP_COPY);
 
 	// The dot: from -135 degrees (silent) to 135 (full)
 	float angle = (-135.0f + 270.0f * Value() / 100.0f) * M_PI / 180.0f;
-	BPoint dot(c.x + sinf(angle) * r * 0.6f, c.y - cosf(angle) * r * 0.6f);
-	float dotSize = fmaxf(2, roundf(r * 0.2f));
+	// About halfway out, as in the original
+	BPoint dot(c.x + sinf(angle) * r * 0.45f, c.y - cosf(angle) * r * 0.45f);
+	// 2 x 2 at the default size, as in the original
+	float dotSize = fmaxf(2, floorf(r * 0.16f));
 	SetHighColor(IsEnabled() ? kKnobDot : kShadow);
 	FillRect(BRect(floorf(dot.x - dotSize / 2), floorf(dot.y - dotSize / 2),
 		floorf(dot.x - dotSize / 2) + dotSize - 1,
@@ -642,7 +707,8 @@ VolumeKnob::Draw(BRect updateRect)
 
 	if (IsFocus() && Window()->IsActive()) {
 		SetHighColor(ui_color(B_KEYBOARD_NAVIGATION_COLOR));
-		StrokeEllipse(c, r + 1, r + 1);
+		SetFlags(Flags() | B_SUBPIXEL_PRECISE);
+		StrokeEllipse(c, r - 0.5f, r - 0.5f);
 	}
 }
 
@@ -711,8 +777,9 @@ VolumeKnob::KeyDown(const char* bytes, int32 count)
 BSize
 VolumeKnob::MinSize()
 {
-	// The same size as the buttons, as in the original
-	float unit = ControlUnit() + 1;
+	// 25 px at the default size, as in the original: a pixel over the
+	// buttons above and below.
+	float unit = ControlUnit() + 3;
 	return BSize(unit - 1, unit - 1);
 }
 

@@ -8,6 +8,7 @@
 #define POWERPLAY_CONTROLS_H
 
 #include <Box.h>
+#include <Bitmap.h>
 #include <Button.h>
 #include <Control.h>
 #include <String.h>
@@ -117,6 +118,7 @@ class VolumeKnob : public BControl {
 public:
 								VolumeKnob(const char* name,
 									BMessage* message);
+	virtual						~VolumeKnob();
 
 	virtual	void				Draw(BRect updateRect);
 	virtual	void				MouseDown(BPoint where);
@@ -131,7 +133,9 @@ public:
 
 private:
 			void				_SetFromUser(int32 value);
+			void				_RenderDisc(int32 size);
 
+			BBitmap*			fDisc;
 			bool				fTracking;
 			float				fStartY;
 			int32				fStartValue;
