@@ -85,6 +85,7 @@ public:
 	bool LoadArchive(std::vector<uint8_t> data);
 
 	const std::string& Name() const { return fName; }
+	void SetName(const std::string& name) { fName = name; }
 
 	// Draws the main window into 0xAARRGGBB pixels (kMainWidth x
 	// kMainHeight), rows bytesPerRow apart.

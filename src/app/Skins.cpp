@@ -12,6 +12,7 @@
 #include <FindDirectory.h>
 #include <Menu.h>
 #include <MenuItem.h>
+#include <Resources.h>
 
 #include <algorithm>
 #include <string.h>
@@ -20,6 +21,11 @@
 #include <vector>
 
 #include "Constants.h"
+#include "WinampSkin.h"
+
+
+const char* const kBuiltInSkin = "built-in:Power Station";
+static const char* const kBuiltInResource = "Power Station";
 
 
 status_t
@@ -59,8 +65,15 @@ fill_skins_menu(BMenu* menu, const char* currentSkin)
 
 	BMessage* builtIn = new BMessage(kMsgSetSkin);
 	builtIn->AddString("path", "");
-	BMenuItem* item = new BMenuItem("PowerPlay", builtIn);
+	BMenuItem* item = new BMenuItem("PowerPlay window", builtIn);
 	item->SetMarked(currentSkin == NULL || currentSkin[0] == '\0');
+	menu->AddItem(item);
+
+	BMessage* power = new BMessage(kMsgSetSkin);
+	power->AddString("path", kBuiltInSkin);
+	item = new BMenuItem(kBuiltInResource, power);
+	item->SetMarked(currentSkin != NULL
+		&& strcmp(currentSkin, kBuiltInSkin) == 0);
 	menu->AddItem(item);
 
 	// The skins in the folder: .wsz files, and folders holding a skin
@@ -130,4 +143,21 @@ install_skin(const entry_ref& ref, BPath& installed)
 			return B_IO_ERROR;
 	}
 	return bytes < 0 ? (status_t)bytes : B_OK;
+}
+
+
+bool
+load_skin(skin::WinampSkin& skin, const char* path)
+{
+	if (strcmp(path, kBuiltInSkin) != 0)
+		return skin.Load(path);
+	BResources* resources = BApplication::AppResources();
+	size_t size = 0;
+	const uint8* data = resources != NULL
+		? (const uint8*)resources->LoadResource(B_RAW_TYPE, kBuiltInResource,
+			&size)
+		: NULL;
+	skin.SetName(kBuiltInResource);
+	return data != NULL && skin.LoadArchive(std::vector<uint8_t>(data,
+		data + size));
 }

@@ -14,3 +14,4 @@ dist/
 *.mp3
 # Winamp skins for testing; other people's artwork
 *.wsz
+!data/*.wsz

@@ -391,6 +391,36 @@ TestLayout()
 }
 
 
+// PowerPlay's own skin (data/PowerStation.wsz): it loads, has every sheet
+// the main window uses, and draws its time digits where they belong.
+static void
+TestBuiltInSkin()
+{
+	skin::WinampSkin skin;
+	if (!skin.Load("data/PowerStation.wsz")) {
+		CHECK(false, "the built-in skin loads");
+		return;
+	}
+	for (const char* name : {"main", "titlebar", "cbuttons", "numbers", "text",
+			"playpaus", "monoster", "volume", "balance", "posbar", "shufrep"})
+		CHECK(skin.HasImage(name), "the built-in skin has %s.bmp", name);
+	skin::State stopped, playing;
+	playing.playback = skin::State::kPlaying;
+	playing.hasFile = true;
+	playing.seconds = 125;
+	std::vector<uint32_t> a(skin::kMainWidth * skin::kMainHeight);
+	std::vector<uint32_t> b(a.size());
+	skin.Render(stopped, a.data(), skin::kMainWidth * 4);
+	skin.Render(playing, b.data(), skin::kMainWidth * 4);
+	bool timeChanged = false;
+	for (int y = 26; y < 39; y++) {
+		for (int x = 48; x < 99; x++)
+			timeChanged |= a[y * skin::kMainWidth + x] != b[y * skin::kMainWidth + x];
+	}
+	CHECK(timeChanged, "the built-in skin shows the time");
+}
+
+
 int
 main()
 {
@@ -398,6 +428,7 @@ main()
 	TestZip();
 	TestSkin();
 	TestLayout();
+	TestBuiltInSkin();
 	if (sFailures == 0)
 		std::printf("all skin tests passed\n");
 	return sFailures == 0 ? 0 : 1;

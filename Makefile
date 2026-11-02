@@ -34,7 +34,7 @@ INCLUDES := src/core src/app
 # An app that uses B_TRANSLATE needs -llocalestub (Haiku and Hokku both ship it).
 APP_LIBS := -lmedia -lz
 # Files the .rdef imports (icons, PNG resources), so changing one rebuilds
-RSRC_DEPS :=
+RSRC_DEPS := data/PowerStation.wsz
 
 override CXXFLAGS += $(addprefix -I,$(INCLUDES))
 
@@ -115,7 +115,7 @@ hpkg:
 
 # Host-side tests: only portable code, no Haiku headers.
 test: tests/test_core.cpp tests/test_audio.cpp tests/test_skin.cpp \
-		$(CORE_SRCS) src/core/*.h
+		$(CORE_SRCS) src/core/*.h data/PowerStation.wsz
 	@mkdir -p obj
 	$(CXX) -std=c++17 -Wall -O1 -g -Isrc/core tests/test_core.cpp \
 		src/core/VUMeter.cpp -o obj/test_core

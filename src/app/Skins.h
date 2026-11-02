@@ -9,6 +9,11 @@
 #include <Path.h>
 
 class BMenu;
+namespace skin { class WinampSkin; }
+
+// The skin built into PowerPlay (a resource), by the name settings and
+// kMsgSetSkin use for it; also the default look.
+extern const char* const kBuiltInSkin;
 
 // The folder PowerPlay looks for skins in (.wsz files or folders), in its
 // settings: ~/config/settings/PowerPlay/Skins on Haiku.
@@ -25,5 +30,8 @@ void fill_skins_menu(BMenu* menu, const char* currentSkin);
 status_t install_skin(const entry_ref& ref, BPath& installed);
 
 bool is_skin_file(const entry_ref& ref);
+
+// Loads a skin from a path, or the built-in one.
+bool load_skin(skin::WinampSkin& skin, const char* path);
 
 #endif	// POWERPLAY_SKINS_H

@@ -61,3 +61,6 @@ resource vector_icon {
 	$"0A050105000A060106000A070107000A080108000A060109000A09010A000A01"
 	$"010B000A0A010C000A0B010D00"
 };
+
+// PowerPlay's own skin, drawn by tools/make-skin.py
+resource(1, "Power Station") #'RAWT' import "data/PowerStation.wsz";

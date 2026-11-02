@@ -196,6 +196,7 @@ PowerPlayApp::PowerPlayApp()
 #endif
 	fShuffle(false),
 	fBalance(0),
+	fSkinPath(kBuiltInSkin),
 	fSkinWhere(100, 100),
 	fLively(true),
 	fPlaylistShown(false),
@@ -918,7 +919,7 @@ PowerPlayApp::_ApplySkin(const char* path)
 	}
 
 	skin::WinampSkin* newSkin = new skin::WinampSkin;
-	if (!newSkin->Load(path)) {
+	if (!load_skin(*newSkin, path)) {
 		delete newSkin;
 		BString text;
 		text.SetToFormat("\"%s\" isn't a Winamp skin PowerPlay can use.",
@@ -1105,7 +1106,7 @@ PowerPlayApp::_LoadSettings()
 	fLively = settings.GetBool("lively needles", fLively);
 	fShuffle = settings.GetBool("shuffle", fShuffle);
 	fBalance = settings.GetFloat("balance", fBalance);
-	fSkinPath = settings.GetString("skin", "");
+	fSkinPath = settings.GetString("skin", kBuiltInSkin);
 	BPoint where;
 	if (settings.FindPoint("skin where", &where) == B_OK
 		&& screen.Contains(where + BPoint(20, 10)))
