@@ -216,6 +216,15 @@ SkinView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 {
 	if (fTracking == skin::kNoControl)
 		return;
+	uint32 buttons = 0;
+	if (Window()->CurrentMessage() != NULL)
+		Window()->CurrentMessage()->FindInt32("buttons", (int32*)&buttons);
+	if (buttons == 0 && fTracking == skin::kTitleBar) {
+		// The release went elsewhere (on Wayland the compositor moves the
+		// window and keeps it)
+		fTracking = skin::kNoControl;
+		return;
+	}
 	if (fTracking == skin::kTitleBar) {
 		Window()->MoveTo(ConvertToScreen(where) - fDragOffset);
 		return;
