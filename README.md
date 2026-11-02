@@ -81,7 +81,9 @@ Winamp's: z previous, x play, c pause, v stop, b next. Shaped skins
 | Haiku R1/beta6 x86_64 (also Renku OS) | `.hpkg` | see the release notes' "Tested" section |
 | Linux x86_64 and aarch64 (glibc 2.39+) | AppImage, built with [Hokku](https://github.com/idumych/hokku) | see the release notes' "Tested" section |
 
-Haiku arm64 isn't built: there's no Haiku R1/beta6 release for arm64 yet.
+Haiku arm64 isn't built: Haiku's arm64 builds don't have the Media Kit yet
+(no libmedia or media server as of hrev60314), which PowerPlay plays through.
+Linux on arm64 is covered by the aarch64 AppImage.
 
 ## Building
 
