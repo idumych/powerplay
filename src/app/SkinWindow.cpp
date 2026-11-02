@@ -38,8 +38,13 @@ public:
 			void				SetSkin(skin::WinampSkin* skin);
 			void				SetState(const skin::State& state);
 			void				SetActive(bool active);
+			void				SetScale(int scale);
 
 private:
+			// A point in the view, in the skin's 275 x 116 pixels
+			BPoint				_SkinPoint(BPoint where) const
+									{ return BPoint(floorf(where.x / fScale),
+										floorf(where.y / fScale)); }
 			void				_Redraw();
 			void				_SliderTo(Control slider, BPoint where);
 			void				_Command(Control control);
@@ -55,6 +60,7 @@ private:
 			std::string			fRawTitle;
 			int					fScroll;
 			bigtime_t			fLastScroll;
+			int					fScale;
 };
 
 
@@ -71,7 +77,8 @@ SkinView::SkinView()
 	fTracking(skin::kNoControl),
 	fInside(false),
 	fScroll(0),
-	fLastScroll(0)
+	fLastScroll(0),
+	fScale(1)
 {
 	SetViewColor(B_TRANSPARENT_COLOR);
 }
@@ -99,6 +106,7 @@ SkinView::SetState(const skin::State& state)
 	next.pressed = fTracking != skin::kNoControl && fInside ? fTracking
 		: skin::kNoControl;
 	next.active = fState.active;
+	next.doubleSize = fState.doubleSize;
 	if (fShowRemaining && next.hasFile)
 		next.seconds = -next.seconds;
 	// While dragging a slider, it shows where it is, not the player.
@@ -143,6 +151,15 @@ SkinView::SetActive(bool active)
 
 
 void
+SkinView::SetScale(int scale)
+{
+	fScale = scale;
+	fState.doubleSize = scale == 2;
+	_Redraw();
+}
+
+
+void
 SkinView::_Redraw()
 {
 	if (!fSkin || fBitmap->InitCheck() != B_OK)
@@ -155,7 +172,7 @@ SkinView::_Redraw()
 void
 SkinView::Draw(BRect updateRect)
 {
-	DrawBitmap(fBitmap, B_ORIGIN);
+	DrawBitmap(fBitmap, fBitmap->Bounds(), Bounds());
 }
 
 
@@ -170,7 +187,8 @@ SkinView::MouseDown(BPoint where)
 		return;
 	}
 
-	Control control = skin::HitTest((int)where.x, (int)where.y);
+	BPoint point = _SkinPoint(where);
+	Control control = skin::HitTest((int)point.x, (int)point.y);
 	fTracking = control;
 	fInside = true;
 	SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
@@ -185,7 +203,7 @@ SkinView::MouseDown(BPoint where)
 			fDragOffset = where;
 			return;
 		case skin::kMenuButton:
-			_ShowMenu(ConvertToScreen(BPoint(6, 12)));
+			_ShowMenu(ConvertToScreen(BPoint(6 * fScale, 12 * fScale)));
 			fTracking = skin::kNoControl;
 			return;
 		case skin::kTime:
@@ -201,7 +219,7 @@ SkinView::MouseDown(BPoint where)
 				fTracking = skin::kNoControl;
 				return;
 			}
-			_SliderTo(control, where);
+			_SliderTo(control, point);
 			break;
 		default:
 			break;
@@ -231,11 +249,12 @@ SkinView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 	}
 	if (fTracking == skin::kPosition || fTracking == skin::kVolume
 		|| fTracking == skin::kBalance) {
-		_SliderTo(fTracking, where);
+		_SliderTo(fTracking, _SkinPoint(where));
 		return;
 	}
-	bool inside = skin::ControlRect(fTracking).Contains((int)where.x,
-		(int)where.y);
+	BPoint point = _SkinPoint(where);
+	bool inside = skin::ControlRect(fTracking).Contains((int)point.x,
+		(int)point.y);
 	if (inside != fInside) {
 		fInside = inside;
 		fState.pressed = inside ? fTracking : skin::kNoControl;
@@ -245,8 +264,9 @@ SkinView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 
 
 void
-SkinView::MouseUp(BPoint where)
+SkinView::MouseUp(BPoint viewWhere)
 {
+	BPoint where = _SkinPoint(viewWhere);
 	Control control = fTracking;
 	fTracking = skin::kNoControl;
 	fState.pressed = skin::kNoControl;
@@ -304,6 +324,9 @@ SkinView::_Command(Control control)
 		case skin::kCloseButton:
 			be_app->PostMessage(B_QUIT_REQUESTED);
 			break;
+		case skin::kDoubleSize:
+			Window()->PostMessage(kMsgToggleDoubleSize);
+			break;
 		default:
 			break;
 	}
@@ -352,6 +375,10 @@ SkinView::_ShowMenu(BPoint screenWhere)
 
 	SkinWindow* window = dynamic_cast<SkinWindow*>(Window());
 	menu->AddItem(new_skins_menu(window != NULL ? window->SkinPath() : NULL));
+	BMenuItem* doubleSize = new BMenuItem("Double size",
+		Command(kMsgToggleDoubleSize), 'D');
+	doubleSize->SetMarked(fScale == 2);
+	menu->AddItem(doubleSize);
 
 	BMenu* settings = new BMenu("Settings");
 	item = new BMenuItem("Show meter in Deskbar", Command(kMsgToggleDeskbar));
@@ -370,6 +397,7 @@ SkinView::_ShowMenu(BPoint screenWhere)
 		if (menu->ItemAt(i)->Submenu() == NULL)
 			menu->ItemAt(i)->SetTarget(be_app);
 	}
+	doubleSize->SetTarget(Window());
 	menu->SetAsyncAutoDestruct(true);
 	menu->Go(screenWhere, true, true, true);
 }
@@ -396,10 +424,14 @@ SkinWindow::SkinWindow(BPoint where)
 	BWindow(BRect(where, where + BPoint(skin::kMainWidth - 1,
 		skin::kMainHeight - 1)), kAppName, B_NO_BORDER_WINDOW_LOOK,
 		B_NORMAL_WINDOW_FEEL, B_NOT_RESIZABLE | B_NOT_ZOOMABLE
-			| B_ASYNCHRONOUS_CONTROLS)
+			| B_ASYNCHRONOUS_CONTROLS),
+	fDoubleSize(false)
 {
 	fView = new SkinView();
 	AddChild(fView);
+	// Command+Q is every window's; these are the menu bar's elsewhere
+	AddShortcut('O', B_COMMAND_KEY, new BMessage(kMsgOpen), be_app);
+	AddShortcut('D', B_COMMAND_KEY, new BMessage(kMsgToggleDoubleSize));
 }
 
 
@@ -428,7 +460,8 @@ SkinWindow::DispatchMessage(BMessage* message, BHandler* handler)
 
 
 // Winamp's keys, which SoundPlay took too: z previous, x play, c pause,
-// v stop, b next; space plays or pauses; Command+Q quits.
+// v stop, b next; space plays or pauses. (Command+O opens and Command+D
+// doubles the size: shortcuts, in the constructor.)
 bool
 SkinWindow::_HandleShortcut(BMessage* message)
 {
@@ -436,17 +469,8 @@ SkinWindow::_HandleShortcut(BMessage* message)
 	const char* bytes;
 	if (message->FindString("bytes", &bytes) != B_OK)
 		return false;
-	if ((modifiers & B_COMMAND_KEY) != 0) {
-		if (bytes[0] == 'q' || bytes[0] == 'Q') {
-			be_app->PostMessage(B_QUIT_REQUESTED);
-			return true;
-		}
-		if (bytes[0] == 'o' || bytes[0] == 'O') {
-			be_app->PostMessage(kMsgOpen);
-			return true;
-		}
-		return false;
-	}
+	if ((modifiers & B_COMMAND_KEY) != 0)
+		return false;	// the window's shortcuts
 	if ((modifiers & (B_CONTROL_KEY | B_OPTION_KEY)) != 0)
 		return false;
 	uint32 command = 0;
@@ -472,6 +496,27 @@ SkinWindow::SetSkin(skin::WinampSkin* newSkin, const char* path)
 	if (newSkin != NULL)
 		SetTitle(BString(kAppName) << ": " << newSkin->Name().c_str());
 	fView->SetSkin(newSkin);
+}
+
+
+void
+SkinWindow::MessageReceived(BMessage* message)
+{
+	if (message->what == kMsgToggleDoubleSize) {
+		SetDoubleSize(!fDoubleSize);
+		return;
+	}
+	BWindow::MessageReceived(message);
+}
+
+
+void
+SkinWindow::SetDoubleSize(bool doubleSize)
+{
+	fDoubleSize = doubleSize;
+	int scale = doubleSize ? 2 : 1;
+	ResizeTo(skin::kMainWidth * scale - 1, skin::kMainHeight * scale - 1);
+	fView->SetScale(scale);
 }
 
 

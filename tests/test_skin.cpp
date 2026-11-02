@@ -377,6 +377,8 @@ TestLayout()
 	CHECK(skin::HitTest(150, 6) == skin::kTitleBar, "title bar");
 	CHECK(skin::HitTest(100, 76) == skin::kPosition, "position");
 	CHECK(skin::HitTest(140, 110) == skin::kNoControl, "background");
+	CHECK(skin::HitTest(13, 50) == skin::kDoubleSize, "clutter bar D");
+	CHECK(skin::HitTest(13, 30) == skin::kNoControl, "clutter bar O");
 
 	CHECK(skin::SliderValue(skin::kVolume, 107) == 0
 		&& skin::SliderValue(skin::kVolume, 175) == 1, "volume ends");
@@ -418,6 +420,24 @@ TestBuiltInSkin()
 			timeChanged |= a[y * skin::kMainWidth + x] != b[y * skin::kMainWidth + x];
 	}
 	CHECK(timeChanged, "the built-in skin shows the time");
+
+	// Double size lights the clutter bar's D, and only there
+	skin::State doubled = stopped;
+	doubled.doubleSize = true;
+	skin.Render(doubled, b.data(), skin::kMainWidth * 4);
+	int inside = 0, outside = 0;
+	for (int y = 0; y < skin::kMainHeight; y++) {
+		for (int x = 0; x < skin::kMainWidth; x++) {
+			if (a[y * skin::kMainWidth + x] == b[y * skin::kMainWidth + x])
+				continue;
+			if (skin::ControlRect(skin::kDoubleSize).Contains(x, y))
+				inside++;
+			else
+				outside++;
+		}
+	}
+	CHECK(inside > 4 && outside == 0, "the built-in skin's D lights (%d, %d)",
+		inside, outside);
 }
 
 

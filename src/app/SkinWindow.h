@@ -22,6 +22,7 @@ public:
 	virtual	void				WindowActivated(bool active);
 	virtual	void				DispatchMessage(BMessage* message,
 									BHandler* handler);
+	virtual	void				MessageReceived(BMessage* message);
 
 			// With the window locked
 			void				SetSkin(skin::WinampSkin* skin,
@@ -30,12 +31,16 @@ public:
 			// What the app knows; the window keeps its own pressed control,
 			// scroll offset and focus.
 			void				SetState(const skin::State& state);
+			// Winamp's double size: every skin pixel drawn 2 x 2
+			void				SetDoubleSize(bool doubleSize);
+			bool				DoubleSize() const { return fDoubleSize; }
 
 private:
 			bool				_HandleShortcut(BMessage* message);
 
 			SkinView*			fView;
 			BString				fSkinPath;
+			bool				fDoubleSize;
 };
 
 #endif	// POWERPLAY_SKIN_WINDOW_H

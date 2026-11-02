@@ -47,6 +47,7 @@ ControlRect(Control control)
 		case kTime:				return {36, 26, 63, 13};
 		case kVisualizer:		return {24, 43, 76, 16};
 		case kTitleText:		return {111, 27, 154, 6};
+		case kDoubleSize:		return {10, 47, 8, 8};
 		case kNoControl:		break;
 	}
 	return {0, 0, 0, 0};
@@ -59,6 +60,7 @@ HitTest(int x, int y)
 	// Small controls before the areas they sit in
 	static const Control kOrder[] = {
 		kMenuButton, kMinimizeButton, kShadeButton, kCloseButton, kTitleBar,
+		kDoubleSize,
 		kPrevious, kPlay, kPause, kStop, kNext, kEject, kPosition, kVolume,
 		kBalance, kShuffle, kRepeat, kEqualizer, kPlaylist, kTime,
 		kVisualizer, kTitleText
@@ -451,6 +453,10 @@ WinampSkin::Render(const State& state, uint32_t* pixels,
 		_Blit(canvas, "titlebar", 18, 9, 9, 9, 264, 3);
 	// The "clutter bar" down the left
 	_Blit(canvas, "titlebar", 304, 0, 8, 43, 10, 22);
+	// Its buttons lit, each from a diagonal below it: O A I D V at 3, 11,
+	// 18, 25 and 33 from its top, x 304 to 336. Only D does anything.
+	if (state.doubleSize || pressed == kDoubleSize)
+		_Blit(canvas, "titlebar", 328, 44 + 25, 8, 8, 10, 22 + 25);
 
 	// Playing, paused or stopped
 	int status = state.playback == State::kPlaying ? 0

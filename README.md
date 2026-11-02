@@ -37,8 +37,9 @@ resource), or in any other Winamp 2.x skin; "PowerPlay window" goes back.
 To add skins, put `.wsz` files (or folders of unpacked ones) in `~/config/settings/PowerPlay/Skins`
 (`~/.config/cosmoe/PowerPlay/Skins` on Linux), or drop a `.wsz` on the
 player to copy it there, then choose it from the Skins menu. Right-click a
-skin for the menu. The keys are Winamp's: z previous, x play, c pause,
-v stop, b next. PowerPlay comes with no skins but its own.
+skin for the menu. The clutter bar's D (or Command+D, or Double size in the
+menu) draws the skin at twice its size. The keys are Winamp's: z previous,
+x play, c pause, v stop, b next. PowerPlay comes with no skins but its own.
 
 ## Scripting
 

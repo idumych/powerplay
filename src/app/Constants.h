@@ -36,6 +36,7 @@ enum {
 	// Skins
 	kMsgSetSkin			= 'Skin',	// "path": string, "" = PowerPlay's look
 	kMsgOpenSkinsFolder	= 'SkFo',
+	kMsgToggleDoubleSize	= 'Dubl',
 	kMsgToggleTime		= 'Time',	// elapsed / remaining
 
 	// The playlist. The app owns it and sends the editor a copy

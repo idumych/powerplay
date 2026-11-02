@@ -195,7 +195,14 @@ NARROW = {
     "k": "#.#|#.#|##.|#.#|#.#", "b": "##.|#.#|##.|#.#|##.",
     "p": "##.|#.#|##.|#..|#..", "h": "#.#|#.#|###|#.#|#.#",
     "z": "###|..#|.#.|#..|###",
+    "a": ".#.|#.#|###|#.#|#.#", "i": "###|.#.|.#.|.#.|###",
+    "d": "##.|#.#|#.#|#.#|##.", "v": "#.#|#.#|#.#|#.#|.#.",
 }
+
+# The clutter bar's buttons: letter, top (from the bar's top at y 22) and
+# height; lit, each comes from titlebar.bmp at x 304 + 8 * index, y 44 + top
+CLUTTER = [("o", 3, 8), ("a", 11, 7), ("i", 18, 7), ("d", 25, 8),
+           ("v", 33, 7)]
 
 TEXT_ROWS = ["abcdefghijklmnopqrstuvwxyz\"@  ",
              "0123456789\x85.:()-'!_+\\/[]^&%,=$#",
@@ -387,9 +394,9 @@ def face_details(img):
                     px[x, y] = GHOST
     draw_text(img, "l", 19, 44, mix(AMBER, LCD_BG, 0.55), NARROW)
     draw_text(img, "r", 19, 52, mix(AMBER, LCD_BG, 0.55), NARROW)
-    for y in (27, 35, 43, 51, 59):   # clutter bar
-        for dy in (0, 1):
-            px[13, y + dy] = px[14, y + dy] = GHOST
+    for letter, top, height in CLUTTER:     # clutter bar, unlit
+        draw_text(img, letter, 12, 22 + top + (height - 5) // 2, GHOST,
+                  NARROW)
     engrave(img, "kbps", 133, 44, NARROW)
     engrave(img, "khz", 173, 44, NARROW)
 
@@ -712,6 +719,12 @@ def build():
         titlebar.paste(title_bar(True, name).crop((x, y, x + 9, y + 9)),
                        (sx, sy))
     titlebar.paste(face1.crop((10, 22, 18, 65)), (304, 0))
+    lit = face1_base.crop((10, 22, 18, 65))
+    for i, (letter, top, height) in enumerate(CLUTTER):
+        draw_text(lit, letter, 2, top + (height - 5) // 2, AMBER, NARROW,
+                  halo=AMBER_HALO)
+        titlebar.paste(lit.crop((0, top, 8, top + height)),
+                       (304 + 8 * i, 44 + top))
     files["titlebar.bmp"] = titlebar
 
     # Transport buttons

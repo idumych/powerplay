@@ -168,6 +168,7 @@ private:
 			float				fBalance;
 			BString				fSkinPath;
 			BPoint				fSkinWhere;
+			bool				fSkinDoubleSize;
 			bool				fLively;
 			bool				fPlaylistShown;
 			double				fResumePosition;
@@ -197,6 +198,7 @@ PowerPlayApp::PowerPlayApp()
 	fShuffle(false),
 	fBalance(0),
 	fSkinWhere(100, 100),
+	fSkinDoubleSize(false),
 	fLively(true),
 	fPlaylistShown(false),
 	fResumePosition(0)
@@ -211,6 +213,8 @@ PowerPlayApp::PowerPlayApp()
 	fPlayer.SetLivelyMeter(fLively);
 	fPlayer.SetBalance(fBalance);
 	fSkinWindow = new SkinWindow(fSkinWhere);
+	if (fSkinDoubleSize)
+		fSkinWindow->SetDoubleSize(true);
 }
 
 
@@ -616,6 +620,7 @@ PowerPlayApp::QuitRequested()
 	}
 	if (fSkinWindow->Lock()) {
 		fSkinWhere = fSkinWindow->Frame().LeftTop();
+		fSkinDoubleSize = fSkinWindow->DoubleSize();
 		fSkinWindow->Quit();
 	}
 	if (fWindow->Lock()) {
@@ -1106,6 +1111,7 @@ PowerPlayApp::_LoadSettings()
 	fShuffle = settings.GetBool("shuffle", fShuffle);
 	fBalance = settings.GetFloat("balance", fBalance);
 	fSkinPath = settings.GetString("skin", "");
+	fSkinDoubleSize = settings.GetBool("skin double size", fSkinDoubleSize);
 	BPoint where;
 	if (settings.FindPoint("skin where", &where) == B_OK
 		&& screen.Contains(where + BPoint(20, 10)))
@@ -1138,6 +1144,7 @@ PowerPlayApp::_SaveSettings()
 	settings.AddFloat("balance", fBalance);
 	settings.AddString("skin", fSkinPath);
 	settings.AddPoint("skin where", fSkinWhere);
+	settings.AddBool("skin double size", fSkinDoubleSize);
 	settings.AddBool("playlist shown", fPlaylistShown);
 	for (int32 i = 0; i < fPlaylist.CountItems(); i++)
 		settings.AddString("playlist", fPlaylist.PathAt(i).c_str());

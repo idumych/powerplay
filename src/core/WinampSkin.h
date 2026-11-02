@@ -40,7 +40,8 @@ enum Control {
 	kPrevious, kPlay, kPause, kStop, kNext, kEject,
 	kPosition, kVolume, kBalance,
 	kShuffle, kRepeat, kEqualizer, kPlaylist,
-	kTime, kVisualizer, kTitleText
+	kTime, kVisualizer, kTitleText,
+	kDoubleSize		// the clutter bar's D
 };
 
 // Where each control is in the window.
@@ -71,6 +72,7 @@ struct State {
 	bool repeat = false;
 	bool equalizer = false;
 	bool playlist = false;
+	bool doubleSize = false;	// the clutter bar's D lit
 	float levelLeft = 0;		// visualizer: needle deflections, 0..~1
 	float levelRight = 0;
 	Control pressed = kNoControl;
