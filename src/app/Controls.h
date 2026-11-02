@@ -7,13 +7,32 @@
 #ifndef POWERPLAY_CONTROLS_H
 #define POWERPLAY_CONTROLS_H
 
+#include <Box.h>
 #include <Button.h>
 #include <Control.h>
+#include <String.h>
 
 
 // The size of the original's controls (22 px), larger with a system font
 // over 12 pt, never smaller.
 float ControlUnit();
+
+
+// A box with SoundPlay's etched frame and its title centred on the top
+// edge, in bold.
+class TitleBox : public BBox {
+public:
+								TitleBox(const char* name);
+
+			void				SetTitle(const char* title);
+			// How far below the top the frame's contents should start.
+			float				TitleHeight() const;
+
+	virtual	void				Draw(BRect updateRect);
+
+private:
+			BString				fTitle;
+};
 
 
 class SymbolButton : public BButton {

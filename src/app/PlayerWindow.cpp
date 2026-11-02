@@ -108,28 +108,26 @@ PlayerWindow::PlayerWindow(BRect frame)
 	fVolume = new VolumeKnob("volume", Command(kMsgSetVolume));
 	fVolume->SetTarget(this);
 
+	// In the plain font, as in the original
 	BFont small(be_plain_font);
-	small.SetSize(roundf(be_plain_font->Size() * 0.85f));
 	fSpeedText = new BStringView("speed text", "Speed: 100%");
-	fSpeedText->SetFont(&small);
 	fTimeText = new BStringView("time text", "Time: 00:00");
-	fTimeText->SetFont(&small);
 	// Room for the widest readings, so the layout doesn't jump
 	float textWidth = fmaxf(small.StringWidth("Speed: -400%"),
 		small.StringWidth("Time: -0:00:00"));
 	fSpeedText->SetExplicitMinSize(BSize(textWidth, B_SIZE_UNSET));
 	fTimeText->SetExplicitMinSize(BSize(textWidth, B_SIZE_UNSET));
 
-	fBox = new BBox("box");
-	fBox->SetLabel("PowerPlay");
+	fBox = new TitleBox("box");
+	fBox->SetTitle(kAppName);
 
 	float unit = ControlUnit();
 	// Spacing measured from the original: 2 px between buttons, the
 	// controls just under the box's title.
 	float gap = roundf(unit / 11);
 	BLayoutBuilder::Group<>(fBox, B_HORIZONTAL, roundf(unit / 3))
-		.SetInsets(roundf(unit / 3), roundf(unit * 0.75f), roundf(unit / 3),
-			roundf(unit / 3))
+		.SetInsets(roundf(unit / 3), fBox->TitleHeight() + 2,
+			roundf(unit / 3), roundf(unit / 3))
 		.AddGroup(B_HORIZONTAL, gap)
 			.Add(fPreviousButton)
 			.Add(fReverseButton)
@@ -292,7 +290,7 @@ PlayerWindow::SetTitle(const char* fileName, const char* formatName)
 		label.SetToFormat("%s (%s)", fileName, formatName);
 	else
 		label = fileName;
-	fBox->SetLabel(label);
+	fBox->SetTitle(label);
 }
 
 

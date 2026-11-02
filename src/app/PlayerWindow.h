@@ -9,12 +9,12 @@
 
 #include <Window.h>
 
-class BBox;
 class BMenuItem;
 class BStringView;
 class PositionBar;
 class SpeedSlider;
 class SymbolButton;
+class TitleBox;
 class VolumeKnob;
 class VUView;
 
@@ -44,7 +44,7 @@ public:
 private:
 			bool				_HandleShortcut(BMessage* message);
 
-			BBox*				fBox;
+			TitleBox*			fBox;
 			SymbolButton*		fPlayButton;
 			SymbolButton*		fReverseButton;
 			SymbolButton*		fStopButton;

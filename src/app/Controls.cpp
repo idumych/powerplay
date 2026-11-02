@@ -22,6 +22,99 @@ ControlUnit()
 }
 
 
+// SoundPlay's palette, measured from the original. Its buttons: a dark
+// grey outline with the corners cut, a white highlight top and left inside
+// a light grey edge, two greys of shading bottom and right, and crisp black
+// symbols on a 23 px grid.
+static const rgb_color kOutline = {0x60, 0x60, 0x60, 255};
+static const rgb_color kFace = {0xe8, 0xe8, 0xe8, 255};
+static const rgb_color kHighlight = {0xf8, 0xfc, 0xf8, 255};
+static const rgb_color kShade = {0xd8, 0xd8, 0xd8, 255};
+static const rgb_color kShadow = {0x98, 0x98, 0x98, 255};
+static const rgb_color kSymbol = {0, 0, 0, 255};
+static const rgb_color kDarkEdge = {0x58, 0x58, 0x58, 255};
+static const rgb_color kTrough = {0xd0, 0xd0, 0xd0, 255};
+static const rgb_color kProgress = {0x68, 0x68, 0xb0, 255};
+static const rgb_color kGroove = {0x70, 0x70, 0x70, 255};
+static const rgb_color kKnobRim = {0x60, 0x64, 0x60, 255};
+static const rgb_color kKnobFace = {0xf0, 0xf0, 0xf0, 255};
+static const rgb_color kKnobLow = {0xb8, 0xbc, 0xb8, 255};
+static const rgb_color kKnobDot = {0xf8, 0x00, 0x00, 255};
+static const int32 kGrid = 23;
+
+
+//	#pragma mark - TitleBox
+
+
+TitleBox::TitleBox(const char* name)
+	:
+	BBox(name, B_WILL_DRAW | B_FRAME_EVENTS, B_NO_BORDER)
+{
+}
+
+
+void
+TitleBox::SetTitle(const char* title)
+{
+	if (fTitle == title)
+		return;
+	fTitle = title;
+	Invalidate();
+}
+
+
+float
+TitleBox::TitleHeight() const
+{
+	font_height height;
+	be_bold_font->GetHeight(&height);
+	return ceilf(height.ascent + height.descent);
+}
+
+
+void
+TitleBox::Draw(BRect updateRect)
+{
+	BRect bounds = Bounds();
+	SetHighColor(ViewColor());
+	FillRect(updateRect);
+
+	font_height height;
+	be_bold_font->GetHeight(&height);
+	float top = floorf((height.ascent + height.descent) / 2);
+
+	// Etched: a grey line with a white one inside it
+	BRect frame(bounds.left, bounds.top + top, bounds.right, bounds.bottom);
+	SetHighColor(kShadow);
+	StrokeRect(BRect(frame.left, frame.top, frame.right - 1,
+		frame.bottom - 1));
+	SetHighColor(kHighlight);
+	StrokeLine(BPoint(frame.left + 1, frame.top + 1),
+		BPoint(frame.right - 2, frame.top + 1));
+	StrokeLine(BPoint(frame.left + 1, frame.top + 1),
+		BPoint(frame.left + 1, frame.bottom - 2));
+	StrokeLine(BPoint(frame.left, frame.bottom),
+		BPoint(frame.right, frame.bottom));
+	StrokeLine(BPoint(frame.right, frame.top),
+		BPoint(frame.right, frame.bottom));
+
+	if (fTitle.Length() > 0) {
+		SetFont(be_bold_font);
+		BString title(fTitle);
+		float room = bounds.Width() - 24;
+		TruncateString(&title, B_TRUNCATE_MIDDLE, room);
+		float width = StringWidth(title.String());
+		float x = floorf(bounds.left + (bounds.Width() - width) / 2);
+		SetHighColor(ViewColor());
+		FillRect(BRect(x - 4, bounds.top, x + width + 3,
+			bounds.top + height.ascent + height.descent));
+		SetHighColor(kSymbol);
+		SetLowColor(ViewColor());
+		DrawString(title.String(), BPoint(x, bounds.top + ceilf(height.ascent)));
+	}
+}
+
+
 //	#pragma mark - SymbolButton
 
 
@@ -44,23 +137,6 @@ SymbolButton::SetSymbol(Symbol symbol)
 }
 
 
-// SoundPlay's button look, measured from the original: a dark grey outline
-// with its corners cut, a white highlight top and left inside a light grey
-// edge, two greys of shading bottom and right, and crisp black symbols on a
-// 23 px grid.
-static const rgb_color kOutline = {0x60, 0x60, 0x60, 255};
-static const rgb_color kFace = {0xe8, 0xe8, 0xe8, 255};
-static const rgb_color kHighlight = {0xf8, 0xfc, 0xf8, 255};
-static const rgb_color kShade = {0xd8, 0xd8, 0xd8, 255};
-static const rgb_color kShadow = {0x98, 0x98, 0x98, 255};
-static const rgb_color kSymbol = {0, 0, 0, 255};
-static const rgb_color kDarkEdge = {0x58, 0x58, 0x58, 255};
-static const rgb_color kGroove = {0x70, 0x70, 0x70, 255};
-static const rgb_color kKnobRim = {0x60, 0x64, 0x60, 255};
-static const rgb_color kKnobFace = {0xf0, 0xf0, 0xf0, 255};
-static const rgb_color kKnobLow = {0xb8, 0xbc, 0xb8, 255};
-static const rgb_color kKnobDot = {0xf8, 0x00, 0x00, 255};
-static const int32 kGrid = 23;
 
 
 // A run of symbol cells on the 23 px grid: row, first and last column.
@@ -419,17 +495,26 @@ PositionBar::PositionBar(const char* name, BMessage* message)
 void
 PositionBar::Draw(BRect updateRect)
 {
-	BRect rect = Bounds();
-	rgb_color panel = ViewColor();
-	be_control_look->DrawTextControlBorder(this, rect, updateRect, panel,
-		be_control_look->Flags(this));
-	SetHighColor(tint_color(panel, B_LIGHTEN_1_TINT));
-	FillRect(rect);
-	if (Value() > 0) {
-		BRect done = rect;
-		done.right = rect.left + roundf(rect.Width() * Value() / 1000.0f);
-		SetHighColor(IsEnabled() ? ui_color(B_CONTROL_HIGHLIGHT_COLOR)
-			: tint_color(panel, B_DARKEN_2_TINT));
+	// SoundPlay's sunken trough: grey top and left, white bottom and
+	// right, a light inside filled in muted blue up to where it's playing.
+	BRect r = Bounds();
+	SetHighColor(kShadow);
+	StrokeLine(r.LeftTop(), r.RightTop());
+	StrokeLine(r.LeftTop(), r.LeftBottom());
+	SetHighColor(kHighlight);
+	StrokeLine(r.LeftBottom() + BPoint(1, 0), r.RightBottom());
+	StrokeLine(r.RightTop() + BPoint(0, 1), r.RightBottom());
+	BRect inside(r.left + 1, r.top + 1, r.right - 1, r.bottom - 1);
+	SetHighColor(kTrough);
+	FillRect(inside);
+	if (IsEnabled()) {
+		BRect done = inside;
+		done.right = inside.left + roundf((inside.Width() + 1) * Value()
+			/ 1000.0f) - 1;
+		// A line at the start even at 0, as the original shows
+		if (done.right < done.left)
+			done.right = done.left;
+		SetHighColor(kProgress);
 		FillRect(done);
 	}
 }
@@ -478,7 +563,7 @@ BSize
 PositionBar::MinSize()
 {
 	float unit = ControlUnit();
-	return BSize(roundf(unit * 4.5f), roundf(unit * 0.45f));
+	return BSize(roundf(unit * 4.5f), roundf(unit * 0.5f) - 1);
 }
 
 
@@ -626,7 +711,8 @@ VolumeKnob::KeyDown(const char* bytes, int32 count)
 BSize
 VolumeKnob::MinSize()
 {
-	float unit = ControlUnit();
+	// The same size as the buttons, as in the original
+	float unit = ControlUnit() + 1;
 	return BSize(unit - 1, unit - 1);
 }
 
