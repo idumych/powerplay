@@ -25,15 +25,17 @@ COSMOE_ROOT ?= /usr
 # All .cpp files, with their directories. Header dirs go in INCLUDES.
 CORE_SRCS := src/core/VUMeter.cpp src/core/PlayHead.cpp src/core/Playlist.cpp \
              src/core/Equalizer.cpp \
-             src/core/Archive.cpp src/core/WinampSkin.cpp
+             src/core/Archive.cpp src/core/WinampSkin.cpp src/core/AudioTags.cpp
 SRCS     := $(CORE_SRCS) src/app/App.cpp src/app/Controls.cpp \
             src/app/DeskbarVU.cpp src/app/EqualizerWindow.cpp \
+            src/app/LibraryWindow.cpp \
             src/app/Player.cpp src/app/PlayerWindow.cpp \
             src/app/PlaylistWindow.cpp src/app/SkinPanels.cpp \
             src/app/SkinWindow.cpp \
             src/app/Skins.cpp src/app/VUView.cpp
 INCLUDES := src/core src/app
 # Libraries beyond the Haiku API (same on every platform), e.g. -lsqlite3 -lcrypto.
+# (BColumnListView is a static library on Haiku, in libbe in Hokku.)
 # An app that uses B_TRANSLATE needs -llocalestub (Haiku and Hokku both ship it).
 APP_LIBS := -lmedia -lz
 # Files the .rdef imports (icons, PNG resources), so changing one rebuilds
@@ -47,11 +49,13 @@ ifneq ($(HAIKU_CROSS),)
   PLATFORM     := Haiku
   override CXXFLAGS += $(HAIKU_CROSS_CFLAGS)
   override LDFLAGS  += $(HAIKU_CROSS_LDFLAGS)
-  LIBS         := -lbe -ltracker -ltranslation -lnetwork $(APP_LIBS)
+  LIBS         := -lbe -ltracker -ltranslation -lnetwork -lcolumnlistview \
+                  $(APP_LIBS)
   RESOURCES     = rc -o obj/$(NAME).rsrc $(RDEF) && xres -o $@ obj/$(NAME).rsrc
 else ifeq ($(UNAME),Haiku)
   PLATFORM     := Haiku
-  LIBS         := -lbe -ltracker -ltranslation -lnetwork $(APP_LIBS)
+  LIBS         := -lbe -ltracker -ltranslation -lnetwork -lcolumnlistview \
+                  $(APP_LIBS)
   INSTALL_DIR  := $(shell finddir B_USER_NONPACKAGED_DIRECTORY)/apps
   RESOURCES     = rc -o obj/$(NAME).rsrc $(RDEF) && xres -o $@ obj/$(NAME).rsrc
 else ifneq ($(wildcard $(COSMOE_ROOT)/include/os/app/Application.h),)
@@ -118,6 +122,7 @@ hpkg:
 
 # Host-side tests: only portable code, no Haiku headers.
 test: tests/test_core.cpp tests/test_audio.cpp tests/test_skin.cpp \
+		tests/test_tags.cpp \
 		$(CORE_SRCS) src/core/*.h data/PowerStation.wsz
 	@mkdir -p obj
 	$(CXX) -std=c++17 -Wall -O1 -g -Isrc/core tests/test_core.cpp \
@@ -127,9 +132,12 @@ test: tests/test_core.cpp tests/test_audio.cpp tests/test_skin.cpp \
 		-o obj/test_audio
 	$(CXX) -std=c++17 -Wall -O1 -g -Isrc/core tests/test_skin.cpp \
 		src/core/Archive.cpp src/core/WinampSkin.cpp -lz -o obj/test_skin
+	$(CXX) -std=c++17 -Wall -O1 -g -Isrc/core tests/test_tags.cpp \
+		src/core/AudioTags.cpp -o obj/test_tags
 	./obj/test_core
 	./obj/test_audio
 	./obj/test_skin
+	./obj/test_tags
 
 install: all
 	mkdir -p "$(INSTALL_DIR)"

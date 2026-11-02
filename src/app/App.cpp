@@ -30,11 +30,13 @@
 #include <string.h>
 #include <strings.h>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "Constants.h"
 #include "DeskbarVU.h"
 #include "EqualizerWindow.h"
+#include "LibraryWindow.h"
 #include "Player.h"
 #include "PlayerWindow.h"
 #include "Playlist.h"
@@ -131,6 +133,11 @@ private:
 									int depth);
 			void				_AddToPlaylist(const BMessage* message,
 									bool replace);
+			void				_AddToLibrary(
+									const std::vector<std::string>& paths);
+			void				_RemoveFromLibrary(const BMessage* message);
+			void				_PlayFromLibrary(const BMessage* message);
+			void				_LibraryChanged();
 			bool				_Load(int32 index, bool atEnd, bool play,
 									bool alertOnError = false);
 			void				_PlayPause(bool backwards);
@@ -139,23 +146,22 @@ private:
 			void				_PlaylistChanged();
 			void				_ShowPlaylist();
 			void				_ShowEqualizer(bool show);
-			// PowerPlay's own playlist and equalizer windows, shown as they
-			// were left, or hidden (a skin has its own)
-			void				_ShowPlainPanels(bool show);
 			void				_UpdateWindow();
 			void				_UpdateSkin(float left, float right);
 			void				_PublishLevels();
+			// A look: "" for PowerPlay's window, kLibraryLook, or a skin
 			bool				_ApplySkin(const char* path);
-			bool				_SkinPathSet() const
-									{ return fSkinPath.Length() > 0; }
+			enum Look { kLookNone, kLookPlain, kLookLibrary, kLookSkin };
+			void				_SetLook(Look look);
+			BWindow*			_LookWindow();
 			void				_ApplyEqualizer();
 			static bool			_IsShown(BWindow* window);
 			static void			_ShowWindow(BWindow* window, bool show);
 			static void			_ToggleWindow(BWindow* window);
-			bool				_SkinShown();
 			int32				_RandomOther();
 			void				_ToggleDeskbar();
-			void				_ShowFilePanel(bool add);
+			enum PanelKind { kOpenPanel, kAddPanel, kLibraryPanel };
+			void				_ShowFilePanel(PanelKind kind);
 			void				_LoadSettings();
 			void				_SaveSettings();
 
@@ -169,9 +175,13 @@ private:
 			skin::WinampSkin	fBaseSkin;
 			bool				fBaseSkinLoaded;
 			PlaylistWindow*		fPlaylistWindow;
+			LibraryWindow*		fLibraryWindow;
+			std::vector<std::string> fLibrary;
 			EqualizerWindow*	fEqWindow;
 			BFilePanel*			fOpenPanel;
 			BFilePanel*			fAddPanel;
+			BFilePanel*			fLibraryPanel;
+			Look				fLook;
 			BMessageRunner*		fMeterRunner;
 			std::vector<BMessenger> fMeters;
 			int32				fTicks;
@@ -184,7 +194,10 @@ private:
 			bool				fWindowMeter;
 			bool				fShuffle;
 			float				fBalance;
+			// The look to start in, then the skin in use (kLookSkin)
 			BString				fSkinPath;
+			BRect				fLibraryFrame;
+			BMessage			fLibraryState;
 			BPoint				fSkinWhere;
 			bool				fSkinDoubleSize;
 			BPoint				fSkinEqWhere;
@@ -211,9 +224,12 @@ PowerPlayApp::PowerPlayApp()
 	fSkinPlaylist(NULL),
 	fBaseSkinLoaded(false),
 	fPlaylistWindow(NULL),
+	fLibraryWindow(NULL),
 	fEqWindow(NULL),
 	fOpenPanel(NULL),
 	fAddPanel(NULL),
+	fLibraryPanel(NULL),
+	fLook(kLookNone),
 	fMeterRunner(NULL),
 	fTicks(0),
 	fWindowFrame(100, 100, 480, 200),
@@ -228,6 +244,7 @@ PowerPlayApp::PowerPlayApp()
 #endif
 	fShuffle(false),
 	fBalance(0),
+	fLibraryFrame(80, 80, 820, 560),
 	fSkinWhere(100, 100),
 	fSkinDoubleSize(false),
 	fSkinEqWhere(-1, -1),
@@ -279,6 +296,7 @@ PowerPlayApp::~PowerPlayApp()
 	delete fMeterRunner;
 	delete fOpenPanel;
 	delete fAddPanel;
+	delete fLibraryPanel;
 }
 
 
@@ -294,13 +312,12 @@ PowerPlayApp::ReadyToRun()
 	if (!fPlayer.HasFile() && fPlaylist.Current() != audio::Playlist::kNone
 		&& _Load(fPlaylist.Current(), false, false))
 		fPlayer.Seek(fResumePosition);
-	// The skin from last time, or PowerPlay's own look
-	BString skinPath = fSkinPath;
-	if (skinPath.Length() == 0 || !_ApplySkin(skinPath.String()))
-		fWindow->Show();
+	// The look from last time, or PowerPlay's own window
+	BString look = fSkinPath;
+	fSkinPath = "";
+	if (!_ApplySkin(look.String()))
+		_ApplySkin("");
 	_UpdateWindow();
-	if (!_SkinPathSet())
-		_ShowPlainPanels(true);
 }
 
 
@@ -405,10 +422,27 @@ PowerPlayApp::MessageReceived(BMessage* message)
 
 	switch (message->what) {
 		case kMsgOpen:
-			_ShowFilePanel(false);
+			_ShowFilePanel(kOpenPanel);
 			break;
 		case kMsgAddFiles:
-			_ShowFilePanel(true);
+			_ShowFilePanel(kAddPanel);
+			break;
+		case kMsgAddToLibrary:
+			_ShowFilePanel(kLibraryPanel);
+			break;
+
+		case kMsgLibraryAdd:
+		{
+			std::vector<std::string> paths;
+			_Collect(message, paths);
+			_AddToLibrary(paths);
+			break;
+		}
+		case kMsgLibraryRemove:
+			_RemoveFromLibrary(message);
+			break;
+		case kMsgLibraryPlay:
+			_PlayFromLibrary(message);
 			break;
 
 		case kMsgPlayPause:
@@ -534,6 +568,10 @@ PowerPlayApp::MessageReceived(BMessage* message)
 					fWindow->SetVolume(fVolume);
 					fWindow->Unlock();
 				}
+				if (fLibraryWindow != NULL && fLibraryWindow->Lock()) {
+					fLibraryWindow->SetVolume(fVolume);
+					fLibraryWindow->Unlock();
+				}
 			}
 			break;
 		}
@@ -544,18 +582,25 @@ PowerPlayApp::MessageReceived(BMessage* message)
 				fWindow->SetRepeat(fRepeat);
 				fWindow->Unlock();
 			}
+			_UpdateWindow();
 			break;
 
 		case kMsgShowPlaylist:
-			if (_SkinShown())
+			if (fLook == kLookSkin)
 				_ToggleWindow(fSkinPlaylist);
-			else
+			else if (fLook == kLookLibrary) {
+				if (fLibraryWindow->Lock()) {
+					fLibraryWindow->ShowSource(LibraryWindow::kPlaylistSource);
+					fLibraryWindow->Activate();
+					fLibraryWindow->Unlock();
+				}
+			} else
 				_ShowPlaylist();
 			_UpdateWindow();
 			break;
 
 		case kMsgShowEqualizer:
-			if (_SkinShown())
+			if (fLook == kLookSkin)
 				_ToggleWindow(fSkinEq);
 			else
 				_ShowEqualizer(!_IsShown(fEqWindow));
@@ -635,14 +680,17 @@ PowerPlayApp::MessageReceived(BMessage* message)
 			break;
 
 		case kMsgShowWindow:
-			if (fWindow->Lock()) {
-				if (fWindow->IsHidden())
-					fWindow->Show();
+		{
+			BWindow* window = _LookWindow();
+			if (window != NULL && window->Lock()) {
+				if (window->IsHidden())
+					window->Show();
 				else
-					fWindow->Activate();
-				fWindow->Unlock();
+					window->Activate();
+				window->Unlock();
 			}
 			break;
+		}
 
 		case kMsgMeterSubscribe:
 		{
@@ -672,6 +720,10 @@ PowerPlayApp::MessageReceived(BMessage* message)
 			if (fWindow->Lock()) {
 				fWindow->SetLively(fLively);
 				fWindow->Unlock();
+			}
+			if (fLibraryWindow != NULL && fLibraryWindow->Lock()) {
+				fLibraryWindow->SetLively(fLively);
+				fLibraryWindow->Unlock();
 			}
 			break;
 
@@ -716,14 +768,14 @@ PowerPlayApp::QuitRequested()
 
 	if (fPlaylistWindow != NULL && fPlaylistWindow->Lock()) {
 		fPlaylistFrame = fPlaylistWindow->Frame();
-		if (!_SkinPathSet())
+		if (fLook == kLookPlain)
 			fPlaylistShown = !fPlaylistWindow->IsHidden();
 		fPlaylistWindow->Quit();
 		fPlaylistWindow = NULL;
 	}
 	if (fEqWindow != NULL && fEqWindow->Lock()) {
 		fEqFrame = fEqWindow->Frame();
-		if (!_SkinPathSet())
+		if (fLook != kLookSkin)
 			fEqShown = !fEqWindow->IsHidden();
 		fEqWindow->Quit();
 		fEqWindow = NULL;
@@ -735,15 +787,22 @@ PowerPlayApp::QuitRequested()
 	}
 	if (fSkinEq->Lock()) {
 		fSkinEqWhere = fSkinEq->Frame().LeftTop();
-		if (_SkinPathSet())
+		if (fLook == kLookSkin)
 			fSkinEqShown = !fSkinEq->IsHidden();
 		fSkinEq->Quit();
 	}
 	if (fSkinPlaylist->Lock()) {
 		fSkinPlaylistFrame = fSkinPlaylist->Frame();
-		if (_SkinPathSet())
+		if (fLook == kLookSkin)
 			fSkinPlaylistShown = !fSkinPlaylist->IsHidden();
 		fSkinPlaylist->Quit();
+	}
+	if (fLibraryWindow != NULL && fLibraryWindow->Lock()) {
+		fLibraryFrame = fLibraryWindow->Frame();
+		fLibraryState.MakeEmpty();
+		fLibraryWindow->SaveState(fLibraryState);
+		fLibraryWindow->Quit();
+		fLibraryWindow = NULL;
 	}
 	if (fWindow->Lock()) {
 		fWindowFrame = fWindow->Frame();
@@ -830,6 +889,8 @@ PowerPlayApp::_AddToPlaylist(const BMessage* message, bool replace)
 	_Collect(message, paths);
 	if (paths.empty())
 		return;
+	// Whatever is played is in the library too
+	_AddToLibrary(paths);
 
 	if (replace) {
 		fPlaylist.Clear();
@@ -904,7 +965,7 @@ PowerPlayApp::_PlayPause(bool backwards)
 {
 	if (!fPlayer.HasFile()) {
 		if (fPlaylist.CountItems() == 0) {
-			_ShowFilePanel(false);
+			_ShowFilePanel(kOpenPanel);
 			return;
 		}
 		int32 index = fPlaylist.Current() != audio::Playlist::kNone
@@ -978,6 +1039,68 @@ PowerPlayApp::_PlaylistChanged()
 		fPlaylistWindow->PostMessage(&update);
 	if (fSkinPlaylist != NULL)
 		fSkinPlaylist->PostMessage(&update);
+	if (fLibraryWindow != NULL)
+		fLibraryWindow->PostMessage(&update);
+}
+
+
+void
+PowerPlayApp::_LibraryChanged()
+{
+	if (fLibraryWindow == NULL)
+		return;
+	BMessage update(kMsgLibraryUpdate);
+	for (const std::string& path : fLibrary)
+		update.AddString("path", path.c_str());
+	fLibraryWindow->PostMessage(&update);
+}
+
+
+// Adds what isn't in the library yet, at its end.
+void
+PowerPlayApp::_AddToLibrary(const std::vector<std::string>& paths)
+{
+	std::unordered_set<std::string> known(fLibrary.begin(), fLibrary.end());
+	size_t count = fLibrary.size();
+	for (const std::string& path : paths) {
+		if (known.insert(path).second)
+			fLibrary.push_back(path);
+	}
+	if (fLibrary.size() != count)
+		_LibraryChanged();
+}
+
+
+void
+PowerPlayApp::_RemoveFromLibrary(const BMessage* message)
+{
+	std::unordered_set<std::string> remove;
+	const char* path;
+	for (int32 i = 0; message->FindString("path", i, &path) == B_OK; i++)
+		remove.insert(path);
+	fLibrary.erase(std::remove_if(fLibrary.begin(), fLibrary.end(),
+		[&remove](const std::string& entry) {
+			return remove.count(entry) != 0;
+		}), fLibrary.end());
+	_LibraryChanged();
+}
+
+
+// The songs as the library lists them become the playlist, and one plays.
+void
+PowerPlayApp::_PlayFromLibrary(const BMessage* message)
+{
+	int32 index = message->GetInt32("index", 0);
+	const char* path;
+	if (message->FindString("path", index, &path) != B_OK)
+		return;
+	fPlaylist.Clear();
+	for (int32 i = 0; message->FindString("path", i, &path) == B_OK; i++)
+		fPlaylist.Add(path);
+	if (fPlayer.Speed() < 0)
+		fPlayer.SetSpeed(-fPlayer.Speed());
+	_Load(index, false, true, true);
+	_PlaylistChanged();
 }
 
 
@@ -1001,23 +1124,6 @@ PowerPlayApp::_ShowEqualizer(bool show)
 		fEqWindow->Activate();
 		fEqWindow->Unlock();
 	}
-}
-
-
-void
-PowerPlayApp::_ShowPlainPanels(bool show)
-{
-	if (show) {
-		if (fPlaylistShown)
-			_ShowPlaylist();
-		if (fEqShown)
-			_ShowEqualizer(true);
-		return;
-	}
-	fPlaylistShown = _IsShown(fPlaylistWindow);
-	fEqShown = _IsShown(fEqWindow);
-	_ShowWindow(fPlaylistWindow, false);
-	_ShowWindow(fEqWindow, false);
 }
 
 
@@ -1115,42 +1221,17 @@ PowerPlayApp::_ToggleWindow(BWindow* window)
 }
 
 
-bool
-PowerPlayApp::_SkinShown()
-{
-	if (!fSkinWindow->Lock())
-		return false;
-	bool shown = !fSkinWindow->IsHidden();
-	fSkinWindow->Unlock();
-	return shown;
-}
-
-
-// A skin's path, or "" for PowerPlay's own look.
+// A skin's path, "" for PowerPlay's own window or kLibraryLook for the
+// Library window.
 bool
 PowerPlayApp::_ApplySkin(const char* path)
 {
 	if (path == NULL || path[0] == '\0') {
-		if (_SkinPathSet()) {
-			fSkinEqShown = _IsShown(fSkinEq);
-			fSkinPlaylistShown = _IsShown(fSkinPlaylist);
-		}
-		bool wasSkinned = _SkinPathSet();
-		fSkinPath = "";
-		_ShowWindow(fSkinEq, false);
-		_ShowWindow(fSkinPlaylist, false);
-		if (wasSkinned)
-			_ShowPlainPanels(true);
-		if (fSkinWindow->Lock()) {
-			if (!fSkinWindow->IsHidden())
-				fSkinWindow->Hide();
-			fSkinWindow->Unlock();
-		}
-		if (fWindow->Lock()) {
-			if (fWindow->IsHidden())
-				fWindow->Show();
-			fWindow->Unlock();
-		}
+		_SetLook(kLookPlain);
+		return true;
+	}
+	if (strcmp(path, kLibraryLook) == 0) {
+		_SetLook(kLookLibrary);
 		return true;
 	}
 
@@ -1172,7 +1253,6 @@ PowerPlayApp::_ApplySkin(const char* path)
 	if (fBaseSkinLoaded)
 		newSkin->FillMissing(fBaseSkin);
 	std::shared_ptr<skin::WinampSkin> shared(newSkin);
-	bool wasSkinned = _SkinPathSet();
 	fSkinPath = path;
 	if (fSkinEq->Lock()) {
 		fSkinEq->SetSkin(shared);
@@ -1182,27 +1262,105 @@ PowerPlayApp::_ApplySkin(const char* path)
 		fSkinPlaylist->SetSkin(shared);
 		fSkinPlaylist->Unlock();
 	}
-	if (!wasSkinned) {
-		_ShowPlainPanels(false);
-		_ShowWindow(fSkinEq, fSkinEqShown);
-		_ShowWindow(fSkinPlaylist, fSkinPlaylistShown);
-		_ApplyEqualizer();
-		_PlaylistChanged();
-	}
 	if (fSkinWindow->Lock()) {
 		fSkinWindow->SetSkin(shared, path);
-		if (fSkinWindow->IsHidden())
-			fSkinWindow->Show();
+		fSkinWindow->Unlock();
+	}
+	_SetLook(kLookSkin);
+	if (fSkinWindow->Lock()) {
 		fSkinWindow->Activate();
 		fSkinWindow->Unlock();
 	}
-	if (fWindow->Lock()) {
-		if (!fWindow->IsHidden())
-			fWindow->Hide();
-		fWindow->Unlock();
-	}
 	_UpdateWindow();
 	return true;
+}
+
+
+// Hides the windows of the look being left, remembering which of its
+// panels were open, and shows the new look's as they were left.
+void
+PowerPlayApp::_SetLook(Look look)
+{
+	Look old = fLook;
+	if (old == look)
+		return;
+
+	switch (old) {
+		case kLookPlain:
+			fPlaylistShown = _IsShown(fPlaylistWindow);
+			_ShowWindow(fPlaylistWindow, false);
+			_ShowWindow(fWindow, false);
+			break;
+		case kLookLibrary:
+			_ShowWindow(fLibraryWindow, false);
+			break;
+		case kLookSkin:
+			fSkinEqShown = _IsShown(fSkinEq);
+			fSkinPlaylistShown = _IsShown(fSkinPlaylist);
+			_ShowWindow(fSkinEq, false);
+			_ShowWindow(fSkinPlaylist, false);
+			_ShowWindow(fSkinWindow, false);
+			break;
+		case kLookNone:
+			break;
+	}
+	// PowerPlay's equalizer serves its window and the Library window
+	if (look == kLookSkin && old != kLookNone && old != kLookSkin) {
+		fEqShown = _IsShown(fEqWindow);
+		_ShowWindow(fEqWindow, false);
+	}
+	if (look != kLookSkin)
+		fSkinPath = "";
+
+	fLook = look;
+	switch (look) {
+		case kLookPlain:
+			_ShowWindow(fWindow, true);
+			if (fPlaylistShown)
+				_ShowPlaylist();
+			break;
+		case kLookLibrary:
+			if (fLibraryWindow == NULL) {
+				fLibraryWindow = new LibraryWindow(fLibraryFrame,
+					fLibraryState);
+				fLibraryWindow->SetVolume(fVolume);
+				fLibraryWindow->SetRepeat(fRepeat);
+				fLibraryWindow->SetShuffle(fShuffle);
+				fLibraryWindow->SetLively(fLively);
+				_LibraryChanged();
+				_PlaylistChanged();
+			}
+			_ShowWindow(fLibraryWindow, true);
+			break;
+		case kLookSkin:
+			_ShowWindow(fSkinWindow, true);
+			_ShowWindow(fSkinEq, fSkinEqShown);
+			_ShowWindow(fSkinPlaylist, fSkinPlaylistShown);
+			_ApplyEqualizer();
+			_PlaylistChanged();
+			break;
+		case kLookNone:
+			break;
+	}
+	if (look != kLookSkin && (old == kLookSkin || old == kLookNone)
+		&& fEqShown)
+		_ShowEqualizer(true);
+	_UpdateWindow();
+}
+
+
+// The main window of the look in use.
+BWindow*
+PowerPlayApp::_LookWindow()
+{
+	switch (fLook) {
+		case kLookLibrary:
+			return fLibraryWindow;
+		case kLookSkin:
+			return fSkinWindow;
+		default:
+			return fWindow;
+	}
 }
 
 
@@ -1268,6 +1426,13 @@ PowerPlayApp::_UpdateWindow()
 		fPlayer.HasFile());
 	fWindow->SetPosition(fPlayer.Position(), fPlayer.Duration());
 	fWindow->Unlock();
+	if (fLibraryWindow != NULL && fLibraryWindow->Lock()) {
+		fLibraryWindow->SetState(fPlayer.IsPlaying(), fPlayer.HasFile());
+		fLibraryWindow->SetPosition(fPlayer.Position(), fPlayer.Duration());
+		fLibraryWindow->SetShuffle(fShuffle);
+		fLibraryWindow->SetRepeat(fRepeat);
+		fLibraryWindow->Unlock();
+	}
 }
 
 
@@ -1283,6 +1448,11 @@ PowerPlayApp::_PublishLevels()
 		if (++fTicks % 3 == 0)
 			fWindow->SetPosition(fPlayer.Position(), fPlayer.Duration());
 		fWindow->Unlock();
+	}
+	if (fLook == kLookLibrary && fTicks % 3 == 0
+		&& fLibraryWindow->Lock()) {
+		fLibraryWindow->SetPosition(fPlayer.Position(), fPlayer.Duration());
+		fLibraryWindow->Unlock();
 	}
 	_UpdateSkin(left, right);
 
@@ -1323,16 +1493,22 @@ PowerPlayApp::_ToggleDeskbar()
 
 
 void
-PowerPlayApp::_ShowFilePanel(bool add)
+PowerPlayApp::_ShowFilePanel(PanelKind kind)
 {
-	BFilePanel*& panel = add ? fAddPanel : fOpenPanel;
+	BFilePanel*& panel = kind == kAddPanel ? fAddPanel
+		: kind == kLibraryPanel ? fLibraryPanel : fOpenPanel;
 	if (panel == NULL) {
-		BMessage message(add ? (uint32)kMsgPlaylistAdd
+		BMessage message(kind == kAddPanel ? (uint32)kMsgPlaylistAdd
+			: kind == kLibraryPanel ? (uint32)kMsgLibraryAdd
 			: (uint32)B_REFS_RECEIVED);
 		panel = new BFilePanel(B_OPEN_PANEL, NULL, NULL,
 			B_FILE_NODE | B_DIRECTORY_NODE, true, &message);
-		panel->Window()->SetTitle(add ? "PowerPlay: Add files"
+		panel->Window()->SetTitle(kind == kAddPanel
+			? "PowerPlay: Add to playlist"
+			: kind == kLibraryPanel ? "PowerPlay: Add to library"
 			: "PowerPlay: Open");
+		panel->SetButtonLabel(B_DEFAULT_BUTTON, kind == kOpenPanel
+			? "Open" : "Add");
 	}
 	panel->Show();
 }
@@ -1368,6 +1544,7 @@ PowerPlayApp::_LoadSettings()
 	fShuffle = settings.GetBool("shuffle", fShuffle);
 	fBalance = settings.GetFloat("balance", fBalance);
 	fSkinPath = settings.GetString("skin", "");
+	const char* entry;
 	fSkinDoubleSize = settings.GetBool("skin double size", fSkinDoubleSize);
 	BPoint eqWhere;
 	if (settings.FindPoint("skin eq where", &eqWhere) == B_OK
@@ -1392,10 +1569,24 @@ PowerPlayApp::_LoadSettings()
 		&& screen.Contains(where + BPoint(20, 10)))
 		fSkinWhere = where;
 	fPlaylistShown = settings.GetBool("playlist shown", false);
+	if (settings.FindRect("library frame", &frame) == B_OK
+		&& screen.Contains(frame.LeftTop() + BPoint(20, 10)))
+		fLibraryFrame = frame;
+	settings.FindMessage("library state", &fLibraryState);
+	bool hasLibrary = false;
+	for (int32 i = 0; settings.FindString("library", i, &entry) == B_OK;
+			i++) {
+		fLibrary.push_back(entry);
+		hasLibrary = true;
+	}
 
-	const char* entry;
 	for (int32 i = 0; settings.FindString("playlist", i, &entry) == B_OK; i++)
 		fPlaylist.Add(entry);
+	// A library starts with the playlist
+	if (!hasLibrary) {
+		for (int32 i = 0; i < fPlaylist.CountItems(); i++)
+			fLibrary.push_back(fPlaylist.PathAt(i));
+	}
 	fPlaylist.SetCurrent(settings.GetInt32("current", -1));
 	fResumePosition = settings.GetDouble("position", 0);
 }
@@ -1417,7 +1608,8 @@ PowerPlayApp::_SaveSettings()
 	settings.AddBool("lively needles", fLively);
 	settings.AddBool("shuffle", fShuffle);
 	settings.AddFloat("balance", fBalance);
-	settings.AddString("skin", fSkinPath);
+	settings.AddString("skin", fLook == kLookLibrary ? kLibraryLook
+		: fSkinPath.String());
 	settings.AddPoint("skin where", fSkinWhere);
 	settings.AddBool("skin double size", fSkinDoubleSize);
 	settings.AddPoint("skin eq where", fSkinEqWhere);
@@ -1432,6 +1624,10 @@ PowerPlayApp::_SaveSettings()
 	for (int32 i = 0; i < skin::kEqBands; i++)
 		settings.AddFloat("eq bands", fEqBands[i]);
 	settings.AddBool("playlist shown", fPlaylistShown);
+	settings.AddRect("library frame", fLibraryFrame);
+	settings.AddMessage("library state", &fLibraryState);
+	for (const std::string& path : fLibrary)
+		settings.AddString("library", path.c_str());
 	for (int32 i = 0; i < fPlaylist.CountItems(); i++)
 		settings.AddString("playlist", fPlaylist.PathAt(i).c_str());
 	settings.AddInt32("current", fPlaylist.Current());

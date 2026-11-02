@@ -14,13 +14,16 @@ namespace skin { class WinampSkin; }
 // The skin built into PowerPlay (a resource), by the name settings and
 // kMsgSetSkin use for it.
 extern const char* const kBuiltInSkin;
+// The Library window, by the name settings and kMsgSetSkin use for it.
+extern const char* const kLibraryLook;
 
 // The folder PowerPlay looks for skins in (.wsz files or folders), in its
 // settings: ~/config/settings/PowerPlay/Skins on Haiku.
 status_t skins_folder(BPath& path, bool create = false);
 
-// A menu of the built-in look and the skins found, the one in use marked:
-// each item sends kMsgSetSkin with "path" ("" for PowerPlay's own look).
+// A menu of the built-in looks and the skins found, the one in use marked:
+// each item sends kMsgSetSkin with "path" ("" for PowerPlay's own look,
+// kLibraryLook for the Library window).
 BMenu* new_skins_menu(const char* currentSkin);
 // The same, filling an existing menu (rebuilt each time it opens).
 void fill_skins_menu(BMenu* menu, const char* currentSkin);

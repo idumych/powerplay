@@ -25,6 +25,7 @@
 
 
 const char* const kBuiltInSkin = "built-in:Power Station";
+const char* const kLibraryLook = "look:Library";
 static const char* const kBuiltInResource = "Power Station";
 
 
@@ -68,6 +69,14 @@ fill_skins_menu(BMenu* menu, const char* currentSkin)
 	BMenuItem* item = new BMenuItem("PowerPlay window", builtIn);
 	item->SetMarked(currentSkin == NULL || currentSkin[0] == '\0');
 	menu->AddItem(item);
+
+	BMessage* library = new BMessage(kMsgSetSkin);
+	library->AddString("path", kLibraryLook);
+	item = new BMenuItem("Library window", library);
+	item->SetMarked(currentSkin != NULL
+		&& strcmp(currentSkin, kLibraryLook) == 0);
+	menu->AddItem(item);
+	menu->AddSeparatorItem();
 
 	BMessage* power = new BMessage(kMsgSetSkin);
 	power->AddString("path", kBuiltInSkin);

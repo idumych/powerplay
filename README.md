@@ -3,8 +3,9 @@
 An audio player for Haiku and Linux in the spirit of SoundPlay: a compact
 controller with variable-speed and backwards playback, a playlist, a 10-band
 equalizer, and a small analog VU meter that can sit in the Deskbar (or the
-desktop's tray on Linux). It can also wear classic Winamp 2.x skins, with
-their equalizer and playlist windows.
+desktop's tray on Linux). It can instead show a Library window, a music
+library in columns, or wear classic Winamp 2.x skins, with their equalizer
+and playlist windows.
 
 PowerPlay is a new program inspired by SoundPlay, the BeOS player by Marco
 Nelissen. It shares no code, images or text with it; the controller's and
@@ -21,6 +22,12 @@ Deskbar.
 ![PowerPlay's controller, playlist and equalizer on Linux](docs/screenshots/linux-powerplay.png)
 
 The same on Linux, with the playlist.
+
+![PowerPlay's Library window on Haiku](docs/screenshots/haiku-library.png)
+
+The Library window (Skins ▸ Library window): the songs PowerPlay knows, with
+their titles, artists and albums read from their tags, a search field, and
+the playlist as a second source.
 
 ### Winamp skins
 
@@ -48,6 +55,9 @@ authors' work and don't come with PowerPlay.
 - Playlist: add files or drop them, sort, shuffle, repeat; it's remembered
   with the place in the song.
 - Equalizer: ten bands (60 Hz to 16 kHz) and a preamp, with Winamp's presets.
+- Library window: every song added, in sortable columns (song, time, artist,
+  album) read from ID3, FLAC and Ogg tags, with search; double-click a song
+  to play the list from there.
 - VU meter in the window, in the Deskbar on Haiku (click it for play
   controls), and on Linux in Hokku's Deskbar or as two tray icons, one per
   needle. "Lively needles" (on by default) follow the beat; turned off
@@ -56,12 +66,22 @@ authors' work and don't come with PowerPlay.
   without an equalizer or playlist borrow Power Station's.
 - Scripting with `hey` (below).
 
-## Skins
+## Looks and skins
 
 PowerPlay opens in its own window; File ▸ Playlist (Command+L) and File ▸
 Equalizer (Command+E) open its playlist and equalizer. From the Skins menu
-it can instead look like a Winamp 2.x player, in Power Station or any other
-skin; "PowerPlay window" goes back.
+it can instead show the Library window, or look like a Winamp 2.x player, in
+Power Station or any other skin; "PowerPlay window" goes back.
+
+The Library window is made of Haiku's own controls. Its Library lists every
+song added to PowerPlay (File ▸ Add to library, the + button, or files
+dropped on it; whatever is played joins it too), and Playlist the songs
+playing now. Click a column's title to sort by it; type in Search to narrow
+the list to songs whose title, artist or album match. Double-clicking a song
+in the Library (or pressing Enter) makes the songs listed the playlist and
+plays from that one; Delete removes the selected songs from the list
+showing. Space plays and pauses, and the display's bar can be dragged to go
+elsewhere in the song.
 
 To add skins, put `.wsz` files (or folders of unpacked ones) in
 `~/config/settings/PowerPlay/Skins` (`~/.config/cosmoe/PowerPlay/Skins` on

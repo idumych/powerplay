@@ -58,6 +58,16 @@ enum {
 	kMsgPlaylistShuffle	= 'PlSh',
 	kMsgAddFiles		= 'AddF',	// opens a file panel that adds
 
+	// The library (the Library window's look): all the songs the user has
+	// added, kept apart from the playlist. The app sends the window
+	// kMsgLibraryUpdate ("path" strings) after every change.
+	kMsgLibraryUpdate	= 'LbUp',
+	kMsgLibraryAdd		= 'LbAd',	// "refs"
+	kMsgLibraryRemove	= 'LbRm',	// "path" strings
+	kMsgLibraryPlay		= 'LbPl',	// "path" strings become the playlist;
+										// "index": int32, the one to play
+	kMsgAddToLibrary	= 'AdLb',	// opens a file panel that adds
+
 	// The meter: a Deskbar meter subscribes with its messenger ("meter")
 	// and the app sends it levels ("left", "right": deflection, 1.0 = full
 	// scale, plus "playing") about 30 times a second.
