@@ -34,6 +34,7 @@
 
 #include "Constants.h"
 #include "DeskbarVU.h"
+#include "EqualizerWindow.h"
 #include "Player.h"
 #include "PlayerWindow.h"
 #include "Playlist.h"
@@ -137,6 +138,10 @@ private:
 			void				_RemoveFromPlaylist(BMessage* message);
 			void				_PlaylistChanged();
 			void				_ShowPlaylist();
+			void				_ShowEqualizer(bool show);
+			// PowerPlay's own playlist and equalizer windows, shown as they
+			// were left, or hidden (a skin has its own)
+			void				_ShowPlainPanels(bool show);
 			void				_UpdateWindow();
 			void				_UpdateSkin(float left, float right);
 			void				_PublishLevels();
@@ -164,6 +169,7 @@ private:
 			skin::WinampSkin	fBaseSkin;
 			bool				fBaseSkinLoaded;
 			PlaylistWindow*		fPlaylistWindow;
+			EqualizerWindow*	fEqWindow;
 			BFilePanel*			fOpenPanel;
 			BFilePanel*			fAddPanel;
 			BMessageRunner*		fMeterRunner;
@@ -190,6 +196,8 @@ private:
 			float				fEqBands[skin::kEqBands];
 			bool				fLively;
 			bool				fPlaylistShown;
+			BRect				fEqFrame;
+			bool				fEqShown;
 			double				fResumePosition;
 };
 
@@ -203,6 +211,7 @@ PowerPlayApp::PowerPlayApp()
 	fSkinPlaylist(NULL),
 	fBaseSkinLoaded(false),
 	fPlaylistWindow(NULL),
+	fEqWindow(NULL),
 	fOpenPanel(NULL),
 	fAddPanel(NULL),
 	fMeterRunner(NULL),
@@ -229,6 +238,8 @@ PowerPlayApp::PowerPlayApp()
 	fEqPreamp(0),
 	fLively(true),
 	fPlaylistShown(false),
+	fEqFrame(0, 0, -1, -1),
+	fEqShown(false),
 	fResumePosition(0)
 {
 	for (float& gain : fEqBands)
@@ -288,8 +299,8 @@ PowerPlayApp::ReadyToRun()
 	if (skinPath.Length() == 0 || !_ApplySkin(skinPath.String()))
 		fWindow->Show();
 	_UpdateWindow();
-	if (fPlaylistShown)
-		_ShowPlaylist();
+	if (!_SkinPathSet())
+		_ShowPlainPanels(true);
 }
 
 
@@ -546,6 +557,8 @@ PowerPlayApp::MessageReceived(BMessage* message)
 		case kMsgShowEqualizer:
 			if (_SkinShown())
 				_ToggleWindow(fSkinEq);
+			else
+				_ShowEqualizer(!_IsShown(fEqWindow));
 			_UpdateWindow();
 			break;
 
@@ -703,9 +716,17 @@ PowerPlayApp::QuitRequested()
 
 	if (fPlaylistWindow != NULL && fPlaylistWindow->Lock()) {
 		fPlaylistFrame = fPlaylistWindow->Frame();
-		fPlaylistShown = !fPlaylistWindow->IsHidden();
+		if (!_SkinPathSet())
+			fPlaylistShown = !fPlaylistWindow->IsHidden();
 		fPlaylistWindow->Quit();
 		fPlaylistWindow = NULL;
+	}
+	if (fEqWindow != NULL && fEqWindow->Lock()) {
+		fEqFrame = fEqWindow->Frame();
+		if (!_SkinPathSet())
+			fEqShown = !fEqWindow->IsHidden();
+		fEqWindow->Quit();
+		fEqWindow = NULL;
 	}
 	if (fSkinWindow->Lock()) {
 		fSkinWhere = fSkinWindow->Frame().LeftTop();
@@ -961,6 +982,46 @@ PowerPlayApp::_PlaylistChanged()
 
 
 void
+PowerPlayApp::_ShowEqualizer(bool show)
+{
+	if (fEqWindow == NULL) {
+		if (!show)
+			return;
+		BRect frame = fEqFrame;
+		if (!frame.IsValid()) {
+			// Under the controller, the first time
+			frame = BRect(0, 0, 100, 100).OffsetToCopy(
+				fWindowFrame.left, fWindowFrame.bottom + 40);
+		}
+		fEqWindow = new EqualizerWindow(frame);
+		fEqWindow->SetEqualizer(fEqOn, fEqPreamp, fEqBands);
+	}
+	_ShowWindow(fEqWindow, show);
+	if (show && fEqWindow->Lock()) {
+		fEqWindow->Activate();
+		fEqWindow->Unlock();
+	}
+}
+
+
+void
+PowerPlayApp::_ShowPlainPanels(bool show)
+{
+	if (show) {
+		if (fPlaylistShown)
+			_ShowPlaylist();
+		if (fEqShown)
+			_ShowEqualizer(true);
+		return;
+	}
+	fPlaylistShown = _IsShown(fPlaylistWindow);
+	fEqShown = _IsShown(fEqWindow);
+	_ShowWindow(fPlaylistWindow, false);
+	_ShowWindow(fEqWindow, false);
+}
+
+
+void
 PowerPlayApp::_ShowPlaylist()
 {
 	if (fPlaylistWindow == NULL) {
@@ -998,6 +1059,10 @@ void
 PowerPlayApp::_ApplyEqualizer()
 {
 	fPlayer.SetEqualizer(fEqOn, fEqPreamp, fEqBands);
+	if (fEqWindow != NULL && fEqWindow->Lock()) {
+		fEqWindow->SetEqualizer(fEqOn, fEqPreamp, fEqBands);
+		fEqWindow->Unlock();
+	}
 	if (fSkinEq == NULL)
 		return;
 	skin::EqState state;
@@ -1070,9 +1135,12 @@ PowerPlayApp::_ApplySkin(const char* path)
 			fSkinEqShown = _IsShown(fSkinEq);
 			fSkinPlaylistShown = _IsShown(fSkinPlaylist);
 		}
+		bool wasSkinned = _SkinPathSet();
 		fSkinPath = "";
 		_ShowWindow(fSkinEq, false);
 		_ShowWindow(fSkinPlaylist, false);
+		if (wasSkinned)
+			_ShowPlainPanels(true);
 		if (fSkinWindow->Lock()) {
 			if (!fSkinWindow->IsHidden())
 				fSkinWindow->Hide();
@@ -1115,6 +1183,7 @@ PowerPlayApp::_ApplySkin(const char* path)
 		fSkinPlaylist->Unlock();
 	}
 	if (!wasSkinned) {
+		_ShowPlainPanels(false);
 		_ShowWindow(fSkinEq, fSkinEqShown);
 		_ShowWindow(fSkinPlaylist, fSkinPlaylistShown);
 		_ApplyEqualizer();
@@ -1305,6 +1374,10 @@ PowerPlayApp::_LoadSettings()
 		&& screen.Contains(eqWhere + BPoint(20, 10)))
 		fSkinEqWhere = eqWhere;
 	fSkinEqShown = settings.GetBool("skin eq shown", fSkinEqShown);
+	if (settings.FindRect("equalizer frame", &frame) == B_OK
+		&& screen.Contains(frame.LeftTop() + BPoint(20, 10)))
+		fEqFrame = frame;
+	fEqShown = settings.GetBool("equalizer shown", fEqShown);
 	if (settings.FindRect("skin playlist frame", &frame) == B_OK
 		&& screen.Contains(frame.LeftTop() + BPoint(20, 10)))
 		fSkinPlaylistFrame = frame;
@@ -1349,6 +1422,9 @@ PowerPlayApp::_SaveSettings()
 	settings.AddBool("skin double size", fSkinDoubleSize);
 	settings.AddPoint("skin eq where", fSkinEqWhere);
 	settings.AddBool("skin eq shown", fSkinEqShown);
+	if (fEqFrame.IsValid())
+		settings.AddRect("equalizer frame", fEqFrame);
+	settings.AddBool("equalizer shown", fEqShown);
 	settings.AddRect("skin playlist frame", fSkinPlaylistFrame);
 	settings.AddBool("skin playlist shown", fSkinPlaylistShown);
 	settings.AddBool("eq on", fEqOn);

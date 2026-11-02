@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "Constants.h"
+#include "Equalizer.h"
 #include "PlayHead.h"
 
 
@@ -54,31 +55,6 @@ CurrentButtons(BView* view)
 
 
 //	#pragma mark - Equalizer
-
-
-// Winamp's presets, in dB from 60 Hz to 16 kHz
-struct Preset {
-	const char* name;
-	float bands[skin::kEqBands];
-};
-
-static const Preset kPresets[] = {
-	{"Flat", {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
-	{"Classical", {0, 0, 0, 0, 0, 0, -7, -7, -7, -9}},
-	{"Club", {0, 0, 8, 5, 5, 5, 3, 0, 0, 0}},
-	{"Dance", {9, 7, 2, 0, 0, -5, -7, -7, 0, 0}},
-	{"Full bass", {9, 9, 9, 5, 1, -4, -8, -10, -11, -11}},
-	{"Full bass and treble", {7, 5, 0, -7, -5, 1, 8, 11, 12, 12}},
-	{"Full treble", {-9, -9, -9, -4, 2, 11, 12, 12, 12, 12}},
-	{"Large hall", {10, 10, 5, 5, 0, -4, -4, -4, 0, 0}},
-	{"Live", {-4, 0, 4, 5, 5, 5, 4, 2, 2, 2}},
-	{"Party", {7, 7, 0, 0, 0, 0, 0, 0, 7, 7}},
-	{"Pop", {-1, 4, 7, 8, 5, 0, -2, -2, -1, -1}},
-	{"Reggae", {0, 0, 0, -5, 0, 6, 6, 0, 0, 0}},
-	{"Rock", {8, 4, -5, -8, -3, 4, 8, 11, 11, 11}},
-	{"Soft", {4, 1, 0, -2, 0, 4, 8, 9, 11, 12}},
-	{"Techno", {8, 5, 0, -5, -4, 0, 8, 9, 9, 8}},
-};
 
 
 class SkinEqView : public BView {
@@ -283,7 +259,8 @@ void
 SkinEqView::_ShowPresets()
 {
 	BPopUpMenu* menu = new BPopUpMenu("presets", false, false);
-	for (const Preset& preset : kPresets) {
+	for (int i = 0; i < audio::kEqualizerPresetCount; i++) {
+		const audio::EqualizerPreset& preset = audio::kEqualizerPresets[i];
 		BMessage* message = new BMessage(kMsgSetEqualizer);
 		for (float gain : preset.bands)
 			message->AddFloat("bands", gain);

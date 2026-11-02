@@ -27,7 +27,8 @@ CORE_SRCS := src/core/VUMeter.cpp src/core/PlayHead.cpp src/core/Playlist.cpp \
              src/core/Equalizer.cpp \
              src/core/Archive.cpp src/core/WinampSkin.cpp
 SRCS     := $(CORE_SRCS) src/app/App.cpp src/app/Controls.cpp \
-            src/app/DeskbarVU.cpp src/app/Player.cpp src/app/PlayerWindow.cpp \
+            src/app/DeskbarVU.cpp src/app/EqualizerWindow.cpp \
+            src/app/Player.cpp src/app/PlayerWindow.cpp \
             src/app/PlaylistWindow.cpp src/app/SkinPanels.cpp \
             src/app/SkinWindow.cpp \
             src/app/Skins.cpp src/app/VUView.cpp

@@ -53,6 +53,15 @@ private:
 			Biquad				fFilters[kBands];
 };
 
+// Winamp's presets, in dB from 60 Hz to 16 kHz
+struct EqualizerPreset {
+	const char*	name;
+	float		bands[Equalizer::kBands];
+};
+
+extern const EqualizerPreset kEqualizerPresets[];
+extern const int kEqualizerPresetCount;
+
 }	// namespace audio
 
 #endif	// POWERPLAY_EQUALIZER_H

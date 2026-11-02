@@ -48,6 +48,7 @@ PlayerWindow::PlayerWindow(BRect frame)
 	menu->AddItem(new BMenuItem("Add files" B_UTF8_ELLIPSIS,
 		Command(kMsgAddFiles), 'O', B_SHIFT_KEY));
 	menu->AddItem(new BMenuItem("Playlist", Command(kMsgShowPlaylist), 'L'));
+	menu->AddItem(new BMenuItem("Equalizer", Command(kMsgShowEqualizer), 'E'));
 	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem("About PowerPlay" B_UTF8_ELLIPSIS,
 		Command(kMsgAbout)));

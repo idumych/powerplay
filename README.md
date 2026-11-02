@@ -17,6 +17,7 @@ measured from screenshots.
 | Playing a file (BMediaFile + BSoundPlayer) | WAV played on Haiku R1/beta6 in QEMU (emulated HDA, output captured): full length, no dropouts, level unchanged |
 | Vector icon (HVIF, tools/make-icon.py) | done; checked in Tracker, Deskbar and About on Haiku R1/beta6 |
 | Playlist, main window like SoundPlay's | not started |
+| Equalizer window in PowerPlay's own look (File ▸ Equalizer, Command+E), in step with a skin's | done; checked on Linux (X11) |
 | Skinned equalizer and playlist windows; the equalizer in the audio path | done, host tests (equalizer response, layout); checked on Linux (X11) with four skins |
 | Built-in Power Station skin (optional) | done, host test; seen on Linux (X11) and Haiku R1/beta6 |
 | Winamp 2.x skins for the main window (.wsz or a folder; Skins menu) | done, host tests; the four test skins checked on Linux (X11, clicks, sliders, drag, relaunch) and drawn on Haiku R1/beta6; no playlist or equalizer skins, no region.txt shapes yet |
@@ -28,7 +29,9 @@ On Haiku: `make`, then `./PowerPlay [file]`. Host tests on any system: `make tes
 
 ## Skins
 
-PowerPlay opens in its own SoundPlay-style window. From the Skins menu it
+PowerPlay opens in its own SoundPlay-style window; File ▸ Playlist
+(Command+L) and File ▸ Equalizer (Command+E) open its playlist and a
+10-band equalizer with Winamp's presets. From the Skins menu it
 can instead look like a classic Winamp 2.x player, either in its own skin,
 Power Station (a brushed-steel panel with amber displays, status lamps, push
 buttons, LED faders and a hazard-striped kick plate, drawn by
