@@ -16,3 +16,13 @@ def pulse(t):   # 120 BPM: decaying bursts, right channel half a beat later and 
     el = math.exp(-6 * (t % 0.5)); er = math.exp(-6 * ((t + 0.25) % 0.5))
     return 0.9 * el * s(t, 220), 0.6 * er * s(t, 330)
 write("pulse.wav", 60, pulse)
+# The same -20 dB tone with an ID3v1 tag (title, artist, album) at its end,
+# for the Library window's check: its title isn't its file name.
+tag = bytearray(128)
+tag[0:3] = b"TAG"
+for offset, text in ((3, b"Signal Check"), (33, b"Test Bench"), (63, b"Calibration")):
+    tag[offset:offset + len(text)] = text
+with open(os.path.join(out, "tone-20dB.wav"), "rb") as f:
+    data = f.read()
+with open(os.path.join(out, "tagged-tone.wav"), "wb") as f:
+    f.write(data + bytes(tag))
