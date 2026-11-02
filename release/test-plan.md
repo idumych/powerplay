@@ -14,13 +14,28 @@ Linux: `rm -f ~/.config/cosmoe/PowerPlay_settings`.
 
 ## Feature checks
 ### play-tone
-Steps: `PowerPlay ~/sp/tone-20dB.wav`, wait 2 s, `hey PowerPlay get Levels > {p}-play-tone.txt`.
+Steps: `PowerPlay ~/sp/tone-20dB.wav`, `hey PowerPlay TLiv` (the classic VU
+meter: "Lively needles" is on by default and reads differently),
+`hey PowerPlay Volu with volume='float(1.0)'` (the meter reads what is played,
+after the volume, 80% by default), wait 2 s,
+`hey PowerPlay get Levels > {p}-play-tone.txt`. On Linux under Xvfb, start
+the AppImage with `COSMOE_AUDIO_BACKEND=null` (no sound server; the meter still
+reads what would be played).
 PASS when: both needles read -5 VU, deflection 0.398 ±0.01 (`left=0.39… right=0.39…`;
 0 VU is -18 dBFS RMS, so a -20 dBFS sine reads 5 dB under it), and the captured audio
 has a 1 kHz tone at -20 dBFS (`sine-check.py`).
 
-### deskbar-meter
-Steps: Settings ▸ "Show meter in Deskbar"; screenshot; click the meter.
-PASS when: a 48×16 meter shows in the Deskbar tray, its needles move with the
-tone, and clicking it opens a menu with "Pause", "Stop", "Show PowerPlay" and
-"Remove from Deskbar". Haiku only: Linux has no Deskbar (see README).
+### skins
+Steps: with the tone playing, `hey PowerPlay Skin with path="built-in:Power Station"`,
+`hey PowerPlay ShEq`, `hey PowerPlay ShPl`; screenshot the three skin
+windows; `ocr-find.sh --text` of the shot (3x enlarged crop and screen
+scale) `> {p}-skins.txt`.
+PASS when: the shot shows Power Station's main window, equalizer and
+playlist, and OCR reads the tone's playlist entry (`tone-20dB`), drawn in
+the skin's playlist window.
+
+### deskbar-meter (Haiku; recorded, not gated)
+Steps: `hey PowerPlay TDsk`; screenshot the Deskbar.
+PASS when: a 48×16 meter shows in the Deskbar tray and its needles stand off
+their rest while the tone plays. On Linux the meter goes to Hokku's Deskbar or
+the desktop's tray, which the AppImage test machines don't have.
