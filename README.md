@@ -50,7 +50,7 @@ authors' work and don't come with PowerPlay.
 
 ## Features
 
-- Plays what the Media Kit can decode (on Haiku MP3, WAV, FLAC, Ogg, Opus…;
+- Plays what the Media Kit can decode (on Haiku MP3, WAV, FLAC, Ogg…;
   on Linux MP3, WAV, FLAC and Ogg Vorbis), at any speed
   from -400% to +400%: backwards too, smoothly, with cubic interpolation.
 - Playlist: add files or drop them, sort, shuffle, repeat; it's remembered
