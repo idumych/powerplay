@@ -14,9 +14,10 @@ Linux: `rm -f ~/.config/cosmoe/PowerPlay_settings`.
 
 ## Feature checks
 ### play-tone
-Steps: `PowerPlay ~/sp/tone-3dB.wav`, wait 2 s, `hey PowerPlay get Levels > {p}-play-tone.txt`.
-PASS when: both needles read 0 VU, deflection 0.708 ±0.01 (`left=0.70… right=0.70…`),
-and the captured audio has a 1 kHz tone at -3 dBFS (`sine-check.py`).
+Steps: `PowerPlay ~/sp/tone-20dB.wav`, wait 2 s, `hey PowerPlay get Levels > {p}-play-tone.txt`.
+PASS when: both needles read -5 VU, deflection 0.398 ±0.01 (`left=0.39… right=0.39…`;
+0 VU is -18 dBFS RMS, so a -20 dBFS sine reads 5 dB under it), and the captured audio
+has a 1 kHz tone at -20 dBFS (`sine-check.py`).
 
 ### deskbar-meter
 Steps: Settings ▸ "Show meter in Deskbar"; screenshot; click the meter.

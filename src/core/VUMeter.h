@@ -18,12 +18,17 @@ namespace vu {
 // one-pole stages, a critically damped movement that reaches 99% of a step
 // in 300 ms, both rising and falling.
 //
-// Deflection is calibrated so a sine reads its peak amplitude: a full-scale
-// sine (0 dBFS) gives 1.0, which is +3 VU at the right end of the scale;
-// -3 dBFS reads 0 VU (0.708), -6 dBFS 0.5, -20 dBFS 0.1.
+// Calibrated as studio meters are for digital audio (EBU R68): 0 VU is a
+// sine at -18 dBFS RMS, which peaks at -15 dBFS. 0 VU is 0.708 of the
+// swing and +3 VU the right end, so a sine reads deflection = its peak
+// amplitude x kSensitivity: -15 dBFS reads 0 VU, -18 dBFS 0.5, -35 dBFS
+// 0.071 (-20 VU). Music mastered loud (a BeOS-era song measured at -12 dBFS
+// RMS) swings around 0 VU; a full-scale sine pins the needle.
 class Ballistics {
 public:
 	static constexpr double kRiseTime = 0.300;	// 99% of a step, seconds
+	// 12 dB: from "a sine reads its peak" to 0 VU at -18 dBFS RMS
+	static constexpr double kSensitivity = 3.9810717055;
 
 	explicit Ballistics(double sampleRate = 44100.0);
 
@@ -34,7 +39,7 @@ public:
 	// One sample, 1.0 = full scale.
 	void Process(float sample)
 	{
-		double rectified = std::fabs(sample) * kAverageToPeak;
+		double rectified = std::fabs(sample) * (kAverageToPeak * kSensitivity);
 		fStage1 += fCoefficient * (rectified - fStage1);
 		fStage2 += fCoefficient * (fStage1 - fStage2);
 	}

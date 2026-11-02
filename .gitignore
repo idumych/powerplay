@@ -9,3 +9,6 @@ dist/
 *.AppImage
 .cosmoe/
 .haiku-headers/
+
+# Music for testing; not ours to publish
+*.mp3

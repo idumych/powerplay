@@ -40,22 +40,26 @@ Tone(double dbfs, double seconds, bool leftOnly = false)
 }
 
 
-// The test WAVs (vm/tools/mkwav.py) read on the scale where they should.
+// Tones read where they should: an EBU alignment tone (-18 dBFS RMS, a
+// -15 dBFS sine) at 0 VU, and the rest in step.
 static void
 TestCalibration()
 {
-	const double levels[] = {0, -3, -6, -10, -20};
+	const double levels[] = {-15, -18, -21, -25, -35};
 	for (double dbfs : levels) {
 		vu::StereoMeter meter(kRate);
 		std::vector<float> tone = Tone(dbfs, 1.0);
 		meter.ProcessInterleaved(tone.data(), tone.size() / 2, 2);
-		double expected = std::pow(10.0, dbfs / 20.0);
+		double expected = std::pow(10.0, dbfs / 20.0)
+			* vu::Ballistics::kSensitivity;
 		CHECK(std::fabs(meter.Left() - expected) < 0.01 * expected,
 			"%g dBFS reads %.4f, expected %.4f", dbfs, meter.Left(), expected);
-		CHECK(std::fabs(vu::DeflectionToVU(meter.Left()) - (dbfs + 3)) < 0.1,
+		CHECK(std::fabs(vu::DeflectionToVU(meter.Left()) - (dbfs + 15)) < 0.1,
 			"%g dBFS reads %.2f VU", dbfs, vu::DeflectionToVU(meter.Left()));
 	}
 	CHECK(std::fabs(vu::VUToDeflection(0) - 0.7079) < 0.001, "0 VU position");
+	CHECK(std::fabs(20 * std::log10(vu::Ballistics::kSensitivity) - 12) < 1e-6,
+		"12 dB of sensitivity");
 }
 
 
@@ -64,17 +68,18 @@ static void
 TestRiseAndFall()
 {
 	vu::Ballistics meter(kRate);
-	std::vector<float> tone = Tone(0, 0.6);
+	std::vector<float> tone = Tone(-15, 0.6);		// reads 0 VU
+	const double target = vu::VUToDeflection(0);
 	double crossed = -1, peak = 0;
 	for (size_t i = 0; i < tone.size() / 2; i++) {
 		meter.Process(tone[i * 2]);
 		peak = std::max(peak, meter.Deflection());
-		if (crossed < 0 && meter.Deflection() >= 0.99)
+		if (crossed < 0 && meter.Deflection() >= 0.99 * target)
 			crossed = i / kRate;
 	}
 	CHECK(std::fabs(crossed - 0.300) < 0.005, "rise to 99%% took %.4f s",
 		crossed);
-	CHECK(peak < 1.01, "overshoot to %.4f", peak);
+	CHECK(peak < 1.01 * target, "overshoot to %.4f", peak);
 
 	double start = meter.Deflection();
 	crossed = -1;
@@ -93,7 +98,7 @@ static void
 TestRipple()
 {
 	vu::Ballistics meter(kRate);
-	std::vector<float> tone = Tone(-6, 1.0);
+	std::vector<float> tone = Tone(-18, 1.0);
 	double low = 2, high = 0;
 	for (size_t i = 0; i < tone.size() / 2; i++) {
 		meter.Process(tone[i * 2]);
@@ -110,7 +115,7 @@ static void
 TestChannels()
 {
 	vu::StereoMeter meter(kRate);
-	std::vector<float> tone = Tone(-6, 1.0, true);
+	std::vector<float> tone = Tone(-18, 1.0, true);	// reads 0.5
 	meter.ProcessInterleaved(tone.data(), tone.size() / 2, 2);
 	CHECK(std::fabs(meter.Left() - 0.5) < 0.005, "left %.4f", meter.Left());
 	CHECK(meter.Right() == 0.0, "right %.4f on a left-only tone",
@@ -120,7 +125,8 @@ TestChannels()
 	vu::StereoMeter mono(kRate);
 	std::vector<float> samples(44100);
 	for (size_t i = 0; i < samples.size(); i++)
-		samples[i] = float(0.5 * std::sin(2 * M_PI * 1000.0 * i / kRate));
+		samples[i] = float(0.5 / vu::Ballistics::kSensitivity
+			* std::sin(2 * M_PI * 1000.0 * i / kRate));
 	mono.ProcessInterleaved(samples.data(), samples.size(), 1);
 	CHECK(std::fabs(mono.Left() - mono.Right()) < 1e-12
 		&& std::fabs(mono.Left() - 0.5) < 0.005, "mono %.4f %.4f",
